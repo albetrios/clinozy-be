@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**17 / 244** variables migrated to an explicit `{ allowed, description }` entry.
+**17 / 246** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -24,8 +24,9 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `AUDIT_RETENTION_CRON` | — | — *(optional)* |  | — |
 | `AUDIT_RETENTION_DAYS` | — | `365` |  | — |
 | `AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED` | — | `true` |  | — |
+| `AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS` | — | `43200` |  | — |
 | `AUTH_SESSION_CLEANUP_CRON` | — | — *(optional)* |  | — |
-| `AUTH_SESSION_MAX_AGE_DAYS` | — | `7` |  | — |
+| `AUTH_SESSION_IDLE_TIMEOUT_SECONDS` | — | `1800` |  | — |
 | `AUTH_SESSION_RETENTION_DAYS` | — | `30` |  | — |
 | `BILLING_DUNNING_GRACE_DAYS` | — | `14` |  | — |
 | `BILLING_READ_ONLY_ENFORCED` | true \| false (or 1 \| 0) | `false` | ✓ | Read-only mode for unpaid clinics: a TEAM organization without a paid plan may not write under /api/v1/app/ once its grace ends (14 days after creation, or BILLING_DUNNING_GRACE_DAYS after a lapsed subscription period). Off, every clinic reports plan_access active. |
@@ -90,6 +91,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `GLOBAL_ADMIN_ACCESS_TOKEN_EXPIRY_SECONDS` | — | `300` |  | — |
 | `GLOBAL_ADMIN_EMAILS` | — | — *(optional)* |  | — |
 | `HEALTH_VERBOSE_BODY_ENABLED` | — | `false` |  | — |
+| `HOSTED_DEPLOYMENT` | — | `false` |  | — |
 | `HSTS_INCLUDE_SUBDOMAINS` | — | `false` |  | — |
 | `HSTS_PRELOAD_REGISTERED` | — | `false` |  | — |
 | `HTTP_BIND_HOST` | non-empty string (host or IP) | `0.0.0.0` | ✓ | Fastify HTTP bind address (the worker health server also binds here). |
@@ -225,7 +227,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `TEAM_ORGANIZATION_ENABLED` | — | `true` |  | — |
 | `TEST_MODE` | — | `false` |  | — |
 | `TOMBSTONE_RETENTION_DAYS` | — | `90` |  | — |
-| `TRUST_PROXY` | false \| 0, or integer 1–10 | `false` | ✓ | Number of reverse-proxy hops Fastify may trust for X-Forwarded-* headers. |
+| `TRUST_PROXY` | false \| 0, integer 1–10, or comma-separated IP/CIDR list | `false` | ✓ | Reverse proxies Fastify trusts for X-Forwarded-* headers: a hop count, or the proxy addresses (CIDR list). |
 | `TRUST_PROXY_REQUIRED` | — | `true` |  | — |
 | `UPLOAD_ALLOW_SVG` | — | `false` |  | — |
 | `UPLOAD_MAX_PENDING_PER_ORGANIZATION` | — | `2000` |  | — |

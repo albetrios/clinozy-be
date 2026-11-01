@@ -11,7 +11,6 @@ import {
   assertUserAccountActive,
 } from '@/shared/utils/auth/account-status.util.js';
 import { resolveAccessTokenRoleForUser } from '@/shared/utils/auth/global-admin-role.util.js';
-import { env } from '@/shared/config/env.config.js';
 import { MFA_AUTHENTICATION_METHOD, signAccessToken } from '@/shared/utils/security/jwt.util.js';
 import { resolveDefaultActiveOrganizationPublicId } from '@/domains/tenancy/sub-domains/organization/resolve-active-organization.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
@@ -21,7 +20,6 @@ import type { AuthSessionService } from '@/domains/auth/sub-domains/auth-session
 import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
 import {
   MAX_MFA_VERIFICATION_ATTEMPTS,
-  MILLISECONDS_PER_DAY,
   MFA_RECOVERY_CODE_COUNT,
   MFA_TOTP_CODE_REPLAY_TTL_SECONDS,
   MFA_TOTP_ENROLLMENT_STAGE_TTL_SECONDS,
@@ -49,6 +47,10 @@ import {
   invalidateAllUnusedRecoveryCodesForUser,
 } from './auth-mfa-recovery-code.repository.js';
 import { generateMfaRecoveryCodes } from './auth-mfa-recovery-code.util.js';
+import { sessionExpiresAtFromNow } from '@/domains/auth/sub-domains/auth-session/session-lifetime.js';
+import { findRecentStepUpFactor } from '@/shared/utils/auth/recent-step-up.util.js';
+import { PROVISIONAL_FACTOR_PERIOD_SECONDS } from '@/shared/constants/security.constants.js';
+import { MILLISECONDS_PER_SECOND } from '@/shared/constants/ttl.constants.js';
 import {
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
@@ -60,8 +62,42 @@ const ERROR_KEY_MFA_INVALID_OR_EXPIRED_CODE = 'errors:mfaInvalidOrExpiredCode';
 /** Redis key prefix marking a TOTP code consumed by a user (by public id), used to reject replay within its validity window. */
 const MFA_TOTP_CONSUMED_KEY_PREFIX = 'mfa:totp:consumed:';
 
-/** Redis key prefix for the per-user (public id) failed-MFA-verification counter (audit-#12 lockout). */
+/** Redis key prefix for the per-user (public id) failed-MFA-verification counters (audit-#12 lockout). */
 const MFA_VERIFICATION_FAILURE_KEY_PREFIX = 'mfa:verify:fail:';
+
+/**
+ * The flow a TOTP verification belongs to — each has its own attempt counter (A-8): the MFA
+ * sign-in challenge (`login`) and the authenticated step-up (`step_up`). With one shared counter,
+ * someone holding the password could spend the sign-in budget and lock the signed-in owner out of
+ * every step-up (and the other way round).
+ */
+type MfaVerificationFlow = 'login' | 'step_up';
+
+/**
+ * Whether a second factor is still provisional for a step-up on `sessionPublicId` (A-1): it was
+ * enrolled under an email-code window and its `provisional_until` has not passed, or this is the
+ * session that enrolled it.
+ */
+function isProvisionalFactor({
+  factor,
+  sessionPublicId,
+  now = new Date(),
+}: {
+  factor: { provisional_until: Date | null; enrolled_on_session_public_id: string | null };
+  sessionPublicId: string | undefined;
+  now?: Date;
+}): boolean {
+  if (factor.provisional_until === null) return false;
+  if (factor.provisional_until > now) return true;
+  return sessionPublicId === undefined || factor.enrolled_on_session_public_id === sessionPublicId;
+}
+
+function mfaVerificationFailureKey(options: {
+  userPublicId: string;
+  flow: MfaVerificationFlow;
+}): string {
+  return `${MFA_VERIFICATION_FAILURE_KEY_PREFIX}${options.flow}:${options.userPublicId}`;
+}
 
 /**
  * Redis key prefix for the staged TOTP enrollment secret keyed by user public id
@@ -149,7 +185,7 @@ export class MfaService {
       // burn TOTP attempts to also lock the victim out of their recovery path (victim DoS).
       // route-audit-#4: atomically count this attempt up-front so concurrent guesses can't
       // overspend the budget; a successful verify clears the counter below.
-      await this.consumeMfaVerificationAttempt(user.public_id);
+      await this.consumeMfaVerificationAttempt({ userPublicId: user.public_id, flow: 'login' });
       // auth.auth_methods is FORCE RLS (audit #7); pin the owner context for every credential
       // read/write — the MFA session already authenticated this user.
       const totpMethod = await withAppDatabaseContext({
@@ -204,7 +240,7 @@ export class MfaService {
     }
 
     // audit-#12: successful second factor clears the failure counter.
-    await this.clearMfaVerificationFailures(user.public_id);
+    await this.clearMfaVerificationFailures({ userPublicId: user.public_id, flow: 'login' });
     const issued = await this.issueAccessTokenAndSession({ user, ipAddress, userAgent });
     // Surface the factor so the handler can audit recovery-code use (the TOTP-bypass break-glass
     // path) distinctly from a normal TOTP second factor.
@@ -234,7 +270,8 @@ export class MfaService {
 
   /**
    * Atomically registers one MFA verification attempt and rejects once the per-user budget of
-   * {@link MAX_MFA_VERIFICATION_ATTEMPTS} is exhausted (audit-#12 + route-audit-#4).
+   * {@link MAX_MFA_VERIFICATION_ATTEMPTS} is exhausted (audit-#12 + route-audit-#4) — one budget
+   * per flow (A-8).
    *
    * @remarks
    * Closes the brute-force gap on `/auth/me/mfa/verify` + `/auth/mfa/login`, which had only a rate
@@ -247,8 +284,14 @@ export class MfaService {
    * {@link clearMfaVerificationFailures}), so legitimate retries never lock out. The response
    * stays the generic invalid-code error so the lockout is not an oracle; the lockout is logged.
    */
-  private async consumeMfaVerificationAttempt(userPublicId: string): Promise<void> {
-    const key = `${MFA_VERIFICATION_FAILURE_KEY_PREFIX}${userPublicId}`;
+  private async consumeMfaVerificationAttempt({
+    userPublicId,
+    flow,
+  }: {
+    userPublicId: string;
+    flow: MfaVerificationFlow;
+  }): Promise<void> {
+    const key = mfaVerificationFailureKey({ userPublicId, flow });
     // Atomic INCR + first-increment EXPIRE (route-audit C5) — a crash between a separate INCR and
     // EXPIRE would otherwise leave a no-TTL counter that locks the user out indefinitely.
     const count = await incrementWithExpiryOnFirst({
@@ -257,14 +300,17 @@ export class MfaService {
       ttlSeconds: MFA_VERIFICATION_LOCKOUT_TTL_SECONDS,
     });
     if (count > MAX_MFA_VERIFICATION_ATTEMPTS) {
-      logger.warn({ userPublicId }, 'auth.mfa.verification_locked_out');
+      logger.warn({ userPublicId, flow }, 'auth.mfa.verification_locked_out');
       throw new UnauthorizedError(ERROR_KEY_MFA_INVALID_OR_EXPIRED_CODE);
     }
   }
 
-  /** Clears the per-user verification-attempt counter after a successful verification. */
-  private async clearMfaVerificationFailures(userPublicId: string): Promise<void> {
-    await this.redis.del(`${MFA_VERIFICATION_FAILURE_KEY_PREFIX}${userPublicId}`);
+  /** Clears one flow's per-user verification-attempt counter after a successful verification. */
+  private async clearMfaVerificationFailures(options: {
+    userPublicId: string;
+    flow: MfaVerificationFlow;
+  }): Promise<void> {
+    await this.redis.del(mfaVerificationFailureKey(options));
   }
 
   private async issueAccessTokenAndSession({
@@ -278,6 +324,7 @@ export class MfaService {
       email: string;
       status: string;
       is_email_verified: boolean;
+      is_mfa_enabled: boolean;
     };
     ipAddress: string;
     userAgent?: string | undefined;
@@ -293,6 +340,7 @@ export class MfaService {
         email: user.email,
         status: user.status,
         isEmailVerified: user.is_email_verified,
+        isMfaEnabled: user.is_mfa_enabled,
       }),
       organizationPublicId,
       // The second factor was just verified: the session is MFA-assured from the start, so
@@ -300,8 +348,7 @@ export class MfaService {
       authenticationMethods: [MFA_AUTHENTICATION_METHOD],
     });
     const sessionTokenHash = createHash('sha256').update(jsonWebToken).digest('hex');
-    const sessionMaxAgeDays = env.AUTH_SESSION_MAX_AGE_DAYS;
-    const expiresAt = new Date(Date.now() + sessionMaxAgeDays * MILLISECONDS_PER_DAY);
+    const expiresAt = sessionExpiresAtFromNow();
     const authSession = await this.authSessionService.createSessionForUser({
       userPublicId: user.public_id,
       data: omitUndefined({
@@ -319,20 +366,28 @@ export class MfaService {
     };
   }
 
-  /** Verify TOTP code for the current user. Requires authenticated request (user public_id). */
+  /**
+   * Verify TOTP code for the current user. Requires authenticated request (user public_id).
+   *
+   * @remarks A-1 — `factor` is the step-up factor the verification earns on `sessionPublicId`:
+   * `mfa`, or the weak `provisional_mfa` while the TOTP factor is provisional (enrolled under an
+   * email-code window: until its `provisional_until`, and always on the session that enrolled it).
+   */
   async verify({
     userPublicId,
+    sessionPublicId,
     body,
   }: {
     userPublicId: string;
+    sessionPublicId?: string | undefined;
     body: unknown;
-  }): Promise<{ verified: boolean }> {
+  }): Promise<{ verified: boolean; factor: 'mfa' | 'provisional_mfa' }> {
     const parsed = validateMfaVerify(body);
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new UnauthorizedError(ERROR_KEY_MFA_USER_NOT_FOUND);
     // audit-#12 / route-audit-#4: atomically count this attempt up-front and reject once the
     // per-user budget is exhausted — concurrent guesses can no longer overspend it.
-    await this.consumeMfaVerificationAttempt(user.public_id);
+    await this.consumeMfaVerificationAttempt({ userPublicId: user.public_id, flow: 'step_up' });
     const totpMethod = await withAppDatabaseContext({
       scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
       callback: () => this.authMethodService.findTotpByUserId(user.id),
@@ -351,7 +406,7 @@ export class MfaService {
     }
     await this.rejectReplayedTotpCode({ userPublicId: user.public_id, totpCode: parsed.code });
     // audit-#12: successful step-up clears the failure counter.
-    await this.clearMfaVerificationFailures(user.public_id);
+    await this.clearMfaVerificationFailures({ userPublicId: user.public_id, flow: 'step_up' });
     await withAppDatabaseContext({
       scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
       callback: () =>
@@ -360,7 +415,8 @@ export class MfaService {
           userId: user.id,
         }),
     });
-    return { verified: true };
+    const provisional = isProvisionalFactor({ factor: totpMethod, sessionPublicId });
+    return { verified: true, factor: provisional ? 'provisional_mfa' : 'mfa' };
   }
 
   /**
@@ -438,14 +494,22 @@ export class MfaService {
    */
   async enrollConfirm({
     userPublicId,
+    sessionPublicId,
     body,
   }: {
     userPublicId: string;
+    sessionPublicId?: string | undefined;
     body: unknown;
   }): Promise<{ recovery_codes: string[]; method_public_id: string }> {
     const parsed = validateMfaEnrollConfirm(body);
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new UnauthorizedError(ERROR_KEY_MFA_USER_NOT_FOUND);
+    // A-1: an enrollment authorized by an email-code step-up window (all that brief mailbox access
+    // opens on a passwordless account) yields a provisional factor.
+    const provisionalFields = await this.provisionalFieldsForEnrollment({
+      userPublicId: user.public_id,
+      sessionPublicId,
+    });
 
     const stageKey = `${MFA_TOTP_ENROLLMENT_STAGE_KEY_PREFIX}${user.public_id}`;
     // GETDEL is atomic in Redis 6.2+; a single network round-trip prevents two
@@ -506,6 +570,7 @@ export class MfaService {
           encrypted_secret: encryptFieldSecret(secret),
           is_primary: false,
           created_by_user_id: user.id,
+          ...provisionalFields,
         });
         await insertMfaRecoveryCodes(user.id, recoveryCodeHashes);
         // sec-re-06: flip is_mfa_enabled INSIDE the same withAppDatabaseContext (user scope)
@@ -525,6 +590,31 @@ export class MfaService {
     return {
       recovery_codes: plaintextRecoveryCodes,
       method_public_id: record.public_id,
+    };
+  }
+
+  /**
+   * The provisional-factor columns for a factor enrolled now on `sessionPublicId` (A-1): set when the
+   * session's step-up window was opened by an email code, empty otherwise.
+   */
+  private async provisionalFieldsForEnrollment({
+    userPublicId,
+    sessionPublicId,
+  }: {
+    userPublicId: string;
+    sessionPublicId: string | undefined;
+  }): Promise<{ provisional_until?: Date; enrolled_on_session_public_id?: string }> {
+    const stepUpFactor = await findRecentStepUpFactor({
+      redis: this.redis,
+      userPublicId,
+      sessionPublicId,
+    });
+    if (stepUpFactor !== 'email_code' || !sessionPublicId) return {};
+    return {
+      provisional_until: new Date(
+        Date.now() + PROVISIONAL_FACTOR_PERIOD_SECONDS * MILLISECONDS_PER_SECOND,
+      ),
+      enrolled_on_session_public_id: sessionPublicId,
     };
   }
 

@@ -55,25 +55,31 @@ type ScopedAuditInput = AuditActor &
  *
  * Best-effort like every audit write: without the audit domain on the server (a unit test's fake
  * request, a boot that never registered it) the row is lost with an `audit.record.unavailable`
- * error log, and the request still succeeds.
+ * error log, and the request still succeeds — unless `failClosed`: a bulk export (B1-3) must not
+ * hand out its file when no row says who took it, so a missing audit domain or a failed write
+ * throws and the request fails.
  */
 export async function recordScopedAuditEvent({
   request,
   input,
+  failClosed = false,
 }: {
   request: FastifyRequest;
   input: ScopedAuditInput;
+  failClosed?: boolean;
 }): Promise<void> {
   const auditService = request.server?.auditDomain?.auditService;
   if (!auditService) {
     request.log?.error({ action: input.action }, 'audit.record.unavailable');
+    if (failClosed) throw new Error(`audit unavailable for ${input.action}`);
     return;
   }
   const network = getAuditRequestNetworkContext(request);
   const { organizationPublicId, ...rest } = input;
-  await recordAuditEvent({
-    auditService,
-    input: { ...rest, ...network, organization_public_id: organizationPublicId ?? null },
-    log: request.log,
-  });
+  const row = { ...rest, ...network, organization_public_id: organizationPublicId ?? null };
+  if (failClosed) {
+    await auditService.record(row);
+    return;
+  }
+  await recordAuditEvent({ auditService, input: row, log: request.log });
 }

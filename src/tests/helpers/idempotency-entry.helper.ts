@@ -5,6 +5,11 @@ export interface IdempotencySeedRequest {
   method: string;
   /** The route template as Fastify reports it, API prefix included (`testApiPath('/uploads')`). */
   routePath: string;
+  /**
+   * The route's path parameters as Fastify parses them (`{ subscription_id: 'sub_…' }`) — the
+   * middleware fingerprints `request.params`, so a route with a `:param` seeds them here.
+   */
+  pathParameters?: Record<string, string>;
   /** The request body as validated (schema defaults included); `undefined` when there is none. */
   body: unknown;
 }

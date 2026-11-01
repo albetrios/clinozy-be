@@ -23,7 +23,7 @@ sub-domains hold what is the member's own (launch §2.F–2.G):
 
 | Route | Gate | Note |
 | --- | --- | --- |
-| `GET /app/memberships` | `organization:read` (every member) | active members by name; `include_ended=true` every membership, any status; `ids`, `q`, `role_id`, `branch_id`, `holds` (a permission code one of their roles grants — `holds=task:read` for a task assignee, T8); each entry says `is_owner`; paged |
+| `GET /app/memberships` | `organization:read` (every member) | active members by name; `include_ended=true` every membership, any status; `ids`, `q`, `role_id`, `branch_id`, `holds` (a permission code one of their roles grants — `holds=task:read` for a task assignee, T8); `q` takes `membership:read`, and so does `holds` for a code the caller does not hold (E-4); each entry says `is_owner`; paged |
 | `GET /app/roles` | `organization:read` (every member) | the role directory (D81 (4)): `id`, `name`, `tone`, `is_system`, `is_locked`, in the order the roles were made (Owner, Admin, the clinic roles, then custom ones); paged |
 
 ## Key invariants

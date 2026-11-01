@@ -5,6 +5,8 @@
 #   docker compose -f docker-compose.sonar.yml down -v           # teardown
 #
 # Dashboard: http://localhost:9000  (admin / admin on first login)
+# Pinned by tag and digest (H-12), and published on 127.0.0.1 only (H-8). The scanner reaches the
+# server by its service name on the compose network, so it needs no host port.
 
 # The project name is pinned, so a push from a git worktree reuses this checkout's containers and
 # volumes instead of colliding on their fixed container names (the default name is the folder's).
@@ -15,10 +17,13 @@ name: clinozy-be
 
 services:
   sonarqube:
-    image: sonarqube:25.5.0.107428-community
+    # Pinned by digest (H-12): a tag can be re-pointed at other bytes; the digest cannot.
+    image: sonarqube:25.5.0.107428-community@sha256:26b5a4f25bc6cb27bffa3f6c6b737254b0ffea7168c379921070b7b769315f2c
     container_name: clinozy-be-sonarqube
+    # Loopback only (H-8): published on every interface, the server — its admin password on first
+    # boot is admin/admin — answered anyone on the same network.
     ports:
-      - '9000:9000'
+      - '127.0.0.1:9000:9000'
     environment:
       SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: 'true'
     volumes:
@@ -39,7 +44,7 @@ services:
       start_period: 120s
 
   scanner:
-    image: sonarsource/sonar-scanner-cli:11
+    image: sonarsource/sonar-scanner-cli:11@sha256:46341f2c2dc560381414e90347885f5cddc716db080adcbafc1cac13e1473094
     container_name: clinozy-be-sonar-scanner
     profiles: ['scan']
     depends_on:

@@ -3,6 +3,7 @@ import { paginatedResponse, successResponse } from '@/shared/utils/http/response
 import {
   getActingUserPublicId,
   getRequestIdentifier,
+  isApiKeyPrincipal,
   requireAuth,
   requireOrganizationScope,
   requirePrincipal,
@@ -12,7 +13,11 @@ import {
   buildAuditActorFields,
   recordScopedAuditEvent,
 } from '@/shared/utils/infrastructure/audit-request-context.util.js';
-import type { OrganizationApiKeyService } from './organization-api-key.service.js';
+import type {
+  OrganizationApiKeyActionOptions,
+  OrganizationApiKeyService,
+} from './organization-api-key.service.js';
+import type { AuthContext } from '@/shared/types/index.js';
 
 /**
  * The `api_key_id` path param, validated at the boundary (sec-re-18, sec-B10 class) so an
@@ -22,6 +27,11 @@ import type { OrganizationApiKeyService } from './organization-api-key.service.j
 function readApiKeyIdParam(request: FastifyRequest): string {
   const rawParams = (request.params as { api_key_id?: string }) ?? {};
   return validatePublicIdParam({ value: rawParams.api_key_id ?? '', fieldName: 'api_key_id' });
+}
+
+/** An API key's scopes stand in for its held permissions in the key-creator role ordering. */
+function apiKeyActionOptions(auth: AuthContext): OrganizationApiKeyActionOptions {
+  return isApiKeyPrincipal(auth) ? { callerApiKeyScopes: auth.apiKeyScopes } : {};
 }
 
 /**
@@ -87,6 +97,7 @@ export function createOrganizationApiKeyController(service: OrganizationApiKeySe
         api_key_public_id: apiKeyId,
         body: request.body,
         updated_by_user_public_id: getActingUserPublicId(auth),
+        options: apiKeyActionOptions(auth),
       });
       await recordScopedAuditEvent({
         request,
@@ -104,7 +115,11 @@ export function createOrganizationApiKeyController(service: OrganizationApiKeySe
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const apiKeyId = readApiKeyIdParam(request);
-      await service.delete({ scope, api_key_public_id: apiKeyId });
+      await service.delete({
+        scope,
+        api_key_public_id: apiKeyId,
+        options: apiKeyActionOptions(auth),
+      });
       // Revoking a long-lived organization credential is a security-relevant change; audit at WARNING.
       await recordScopedAuditEvent({
         request,

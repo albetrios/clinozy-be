@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
-import type { RateLimitOptions } from '@fastify/rate-limit';
+import type { CreateRateLimitOptions } from '@fastify/rate-limit';
 import { env } from '@/shared/config/env.config.js';
 import { getAuthenticatedActorId } from '@/shared/utils/http/request.util.js';
+import { rateLimitIpKey } from '@/shared/utils/http/rate-limit-ip-key.util.js';
 import { Sentry } from '@/infrastructure/observability/sentry/sentry.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { MILLISECONDS_PER_MINUTE } from '@/shared/constants/ttl.constants.js';
@@ -11,10 +12,11 @@ import { shouldEmitRateLimitTelemetry } from '@/shared/middlewares/rate-limit/ra
 /**
  * Per-route rate limit presets for high-risk endpoints.
  * Authenticated presets use hook `preHandler` so `keyGenerator` runs after `app.authenticate`.
+ * Every IP fallback keys on {@link rateLimitIpKey} (IPv6 masked to its /64 — D-3).
  * @see https://github.com/fastify/fastify-rate-limit#custom-hook-example-usage-after-authentication
  */
 function buildRateLimitKeyFromIpAddress(request: FastifyRequest): string {
-  return `ip:${request.ip}`;
+  return `ip:${rateLimitIpKey(request.ip)}`;
 }
 
 /**
@@ -91,13 +93,13 @@ function buildRateLimitKeyFromRequestBodyEmail(request: FastifyRequest): string 
       return `email:${emailHashPrefix}`;
     }
   }
-  return `ip:${request.ip}`;
+  return `ip:${rateLimitIpKey(request.ip)}`;
 }
 
 function buildRateLimitKeyFromAuthenticatedUserOrIpAddress(request: FastifyRequest): string {
   const auth = request.auth;
   const userId = auth && auth.kind === 'user' ? auth.userId : undefined;
-  return userId ? `user:${userId}` : `ip:${request.ip}`;
+  return userId ? `user:${userId}` : `ip:${rateLimitIpKey(request.ip)}`;
 }
 
 /**
@@ -136,7 +138,7 @@ function buildRateLimitKeyFromOrganizationActorOrIpAddress(request: FastifyReque
   if (actorId) {
     return `actor:${actorId}`;
   }
-  return `ip:${request.ip}`;
+  return `ip:${rateLimitIpKey(request.ip)}`;
 }
 
 // Read from the validated env config: RATE_LIMIT_RELAXED_CAPS defaults false (hardened); development
@@ -175,16 +177,20 @@ const STRICT_PUBLIC_PER_EMAIL_MAX_REQUESTS_PER_WINDOW = RATE_LIMIT_CAPS_RELAXED 
 const STRICT_PUBLIC_PER_EMAIL_WINDOW_MS = 15 * MILLISECONDS_PER_MINUTE;
 
 /**
- * Options for an `app.rateLimit(...)` preHandler that throttles per normalized email/identity,
- * independent of IP. Pass to `app.rateLimit(...)` and add the returned hook to a route's
- * `preHandler` array; keying happens at `preHandler` so the validated body is available.
+ * Options for the per-email limiter `app.createRateLimit(...)` builds in
+ * `createPerEmailRateLimitPreHandler` (`per-email-rate-limit.ts`) — throttles per normalized
+ * email/identity, independent of IP; keyed at `preHandler` so the validated body is available.
+ *
+ * @remarks
+ * A standalone limiter, never `app.rateLimit(...)`: `@fastify/rate-limit` marks a request as
+ * limited the first time any of its hooks runs, so on a route that already carries
+ * {@link STRICT_PUBLIC_RATE_LIMIT} (an `onRequest` hook) an `app.rateLimit()` preHandler returned
+ * without counting and the per-email cap never fired.
  */
-export const STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS: RateLimitOptions = {
+export const STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS: CreateRateLimitOptions = {
   max: STRICT_PUBLIC_PER_EMAIL_MAX_REQUESTS_PER_WINDOW,
   timeWindow: STRICT_PUBLIC_PER_EMAIL_WINDOW_MS,
-  hook: 'preHandler',
   keyGenerator: buildRateLimitKeyFromRequestBodyEmail,
-  onExceeded: recordRouteRateLimitExceeded,
 };
 
 const STRICT_AUTHED_MAX_REQUESTS_PER_WINDOW = RATE_LIMIT_CAPS_RELAXED ? 5000 : 10;
@@ -303,6 +309,27 @@ export const EXPENSIVE_AUTHED_RATE_LIMIT = {
       timeWindow: 5 * MILLISECONDS_PER_MINUTE,
       hook: 'preHandler' as const,
       keyGenerator: buildRateLimitKeyFromAuthenticatedUserOrIpAddress,
+      onExceeded: recordRouteRateLimitExceeded,
+    },
+  },
+} as const;
+
+/**
+ * Bulk list exports (D-4): 5 per 5 minutes in production, keyed by organization + actor
+ * (`organization:<id>:actor:<actorId>`) like {@link ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT}, so one
+ * member's downloads never spend another's and a member of two clinics has a budget in each. An
+ * export reads up to 5,000 rows into memory, so its budget is {@link EXPENSIVE_AUTHED_RATE_LIMIT}'s;
+ * the per-organization concurrency cap sits beside it (`withOrganizationExportSlot`). Lifted when
+ * RATE_LIMIT_RELAXED_CAPS is set (development/test) so suites that export from one loopback
+ * member do not produce flaky 429s.
+ */
+export const EXPORT_AUTHED_RATE_LIMIT = {
+  config: {
+    rateLimit: {
+      max: RATE_LIMIT_CAPS_RELAXED ? 5000 : 5,
+      timeWindow: 5 * MILLISECONDS_PER_MINUTE,
+      hook: 'preHandler' as const,
+      keyGenerator: buildRateLimitKeyFromOrganizationActorOrIpAddress,
       onExceeded: recordRouteRateLimitExceeded,
     },
   },

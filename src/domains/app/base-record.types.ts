@@ -122,6 +122,29 @@ export interface OrganizationOperatingSettings {
 }
 
 /**
+ * The record kinds an upload can be bound to (C-2) — the `resource` a record's descriptor names in
+ * `uploadFields`, and the value an upload row stores as `bound_resource`.
+ */
+export const UPLOAD_RECORD_RESOURCE = {
+  PATIENT_REVIEW: 'patient_review',
+  PATIENT_REPORT: 'patient_report',
+  PATIENT_IMAGE: 'patient_image',
+  CONTACT_ACTIVITY: 'contact_activity',
+  PAYMENT: 'payment',
+} as const;
+
+/** A record an upload key is bound to — its kind and public id. */
+export interface BaseRecordUploadOwner {
+  resource: string;
+  publicId: string;
+}
+
+/** A link to sign: the upload's key and the record that must own it (C-2). */
+export interface BaseRecordUploadBinding extends BaseRecordUploadOwner {
+  fileKey: string;
+}
+
+/**
  * What table rules may call outside the app records — wired once by the app container, so a
  * rule never imports another domain.
  *
@@ -160,8 +183,18 @@ export interface BaseRecordPorts {
    */
   fileReadUrls: (options: {
     organizationId: number;
-    fileKeys: readonly string[];
+    /** Each key with the record it must be bound to — a key bound to another record is no link (C-2). */
+    bindings: readonly BaseRecordUploadBinding[];
   }) => Promise<ReadonlyMap<string, BaseRecordFileLink>>;
+  /**
+   * Binds the organization's confirmed uploads among `fileKeys` to `owner` on its first attach
+   * (C-2) — in the write's own transaction; answers how many keys now belong to `owner`.
+   */
+  bindUploadKeys: (options: {
+    organizationId: number;
+    fileKeys: readonly string[];
+    owner: BaseRecordUploadOwner;
+  }) => Promise<number>;
   /**
    * A short-lived view link for each of the organization's thumbnails among `thumbnailKeys` (a
    * patient photo's grid image) — late-wired from the upload domain; a key that is no thumbnail
@@ -331,6 +364,11 @@ export interface BaseRecordCollectionInput {
 export interface BaseRecordDescriptor<Output> extends BaseRecordRules {
   /** The 404 name (`Offering`). */
   label: string;
+  /**
+   * The fields that carry upload keys (one key or a list), with the record kind an upload binds to
+   * on its first attach (C-2) — a write refuses a key bound to another record.
+   */
+  uploadFields?: readonly { field: string; resource: string }[];
   repository: BaseRecordRepository;
   /**
    * The `DELETE` query when the record has its own reasons (an order's cancel, a sale's void —

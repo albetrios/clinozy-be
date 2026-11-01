@@ -68,8 +68,8 @@ Templates translate through `translateMailText({ key, locale, values })` (`src/i
 
 ## Middleware and request
 
-- **i18n middleware** (`src/shared/middlewares/core/i18n.middleware.ts`): Runs on every request (`onRequest`), sets `request.t`, `request.language`, and prefers `Accept-Language` when present.
-- **Ignored routes**: `/livez`, `/readyz`, `/api/v1/mcp` (no translation; fallback messages used when needed).
+- **i18n middleware** (`src/shared/middlewares/core/i18n.middleware.ts`): Runs on every request (`onRequest`) and resolves **one supported language** — the first `Accept-Language` segment when it is in `SUPPORTED_LANGUAGES`, else the active organization's default locale (applied by the auth middleware), else `en`. It sets `request.language` and `request.t` (`i18next.getFixedT(language)`), and the response carries `Content-Language` with that language.
+- **The request never names a language i18next loads.** i18next is initialised with `supportedLngs: SUPPORTED_LANGUAGES` (`nonExplicitSupportedLngs`, `load: 'languageOnly'`), and no `?lng=` query or `i18next` cookie is read: an unknown code maps to `en` and leaves `i18next.options.preload` unchanged. The previous `i18next-http-middleware` handler loaded any requested code into the shared instance, so random codes from anonymous callers grew that list without bound (D-1, pinned by `src/tests/unit/middleware/i18n.middleware.hook.unit.test.ts`).
 
 ## Locale key parity
 

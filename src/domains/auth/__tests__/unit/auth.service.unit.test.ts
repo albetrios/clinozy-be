@@ -127,15 +127,20 @@ describe('AuthService', () => {
       public_id: 'session_public',
       user_id: 1,
       expires_at: new Date(Date.now() + 86_400_000),
+      created_at: new Date(Date.now() - 60_000),
+      last_active_at: new Date(Date.now() - 60_000),
       revoked_at: null,
     }),
     findSessionByPublicIdIncludingRevoked: vi.fn().mockResolvedValue({
       public_id: 'session_public',
       user_id: 1,
       expires_at: new Date(Date.now() + 86_400_000),
+      created_at: new Date(Date.now() - 60_000),
+      last_active_at: new Date(Date.now() - 60_000),
       is_revoked: false,
     }),
     rotateSessionTokenHash: vi.fn().mockResolvedValue(undefined),
+    revokeLapsedSession: vi.fn().mockResolvedValue(undefined),
     refreshSessionCredentials: vi.fn().mockResolvedValue({ refresh_secret: 'new-refresh-secret' }),
     replaceRefreshedAccessToken: vi.fn().mockResolvedValue(true),
     rebindAccessToken: vi.fn().mockResolvedValue(undefined),
@@ -456,6 +461,8 @@ describe('AuthService', () => {
       user_id: 1,
       organization_id: 42,
       expires_at: new Date(Date.now() + 86_400_000),
+      created_at: new Date(Date.now() - 60_000),
+      last_active_at: new Date(Date.now() - 60_000),
       is_revoked: false,
     } as never);
     vi.mocked(resolve.findUserActiveOrganizationPublicIdByInternalId).mockResolvedValue(
@@ -487,6 +494,8 @@ describe('AuthService', () => {
       user_id: 1,
       organization_id: 42,
       expires_at: new Date(Date.now() + 86_400_000),
+      created_at: new Date(Date.now() - 60_000),
+      last_active_at: new Date(Date.now() - 60_000),
       is_revoked: false,
     } as never);
     // Membership revoked / organization deleted → re-validation returns undefined.
@@ -511,6 +520,8 @@ describe('AuthService', () => {
       user_id: 1,
       organization_id: 42,
       expires_at: new Date(Date.now() + 86_400_000),
+      created_at: new Date(Date.now() - 60_000),
+      last_active_at: new Date(Date.now() - 60_000),
       is_revoked: false,
     } as never);
     // The rotated row names organization 77: a switch committed after the session was read.
@@ -554,6 +565,8 @@ describe('AuthService', () => {
       user_id: 1,
       organization_id: 42,
       expires_at: new Date(Date.now() + 86_400_000),
+      created_at: new Date(Date.now() - 60_000),
+      last_active_at: new Date(Date.now() - 60_000),
       is_revoked: false,
     } as never);
     vi.mocked(authSessionService.refreshSessionCredentials).mockResolvedValueOnce({
@@ -719,6 +732,8 @@ describe('AuthService', () => {
         organization_id: 9,
         mfa_verified_at: null,
         expires_at: new Date(Date.now() + 86_400_000),
+        created_at: new Date(Date.now() - 60_000),
+        last_active_at: new Date(Date.now() - 60_000),
         is_revoked: false,
       } as never);
       vi.mocked(resolve.findUserActiveOrganizationPublicIdByInternalId).mockResolvedValueOnce(
@@ -748,6 +763,8 @@ describe('AuthService', () => {
         organization_id: 9,
         mfa_verified_at: null,
         expires_at: new Date(Date.now() + 86_400_000),
+        created_at: new Date(Date.now() - 60_000),
+        last_active_at: new Date(Date.now() - 60_000),
         is_revoked: false,
       } as never);
       vi.mocked(resolve.findUserActiveOrganizationPublicIdByInternalId).mockResolvedValueOnce(
@@ -772,6 +789,8 @@ describe('AuthService', () => {
         organization_id: 9,
         mfa_verified_at: new Date(),
         expires_at: new Date(Date.now() + 86_400_000),
+        created_at: new Date(Date.now() - 60_000),
+        last_active_at: new Date(Date.now() - 60_000),
         is_revoked: false,
       } as never);
       vi.mocked(resolve.findUserActiveOrganizationPublicIdByInternalId).mockResolvedValueOnce(
@@ -940,6 +959,8 @@ describe('AuthService', () => {
       public_id: 'session_public',
       user_id: 1,
       expires_at: new Date(Date.now() - 1000),
+      created_at: new Date(Date.now() - 60_000),
+      last_active_at: new Date(Date.now() - 60_000),
       is_revoked: false,
     } as never);
     await expect(
@@ -953,6 +974,8 @@ describe('AuthService', () => {
       public_id: 'session_public',
       user_id: 1,
       expires_at: new Date(Date.now() + 86_400_000),
+      created_at: new Date(Date.now() - 60_000),
+      last_active_at: new Date(Date.now() - 60_000),
       is_revoked: false,
     } as never);
     vi.mocked(userService.findById).mockResolvedValue({
@@ -980,6 +1003,8 @@ describe('AuthService', () => {
       public_id: 'session_public',
       user_id: 1,
       expires_at: new Date(Date.now() + 86_400_000),
+      created_at: new Date(Date.now() - 60_000),
+      last_active_at: new Date(Date.now() - 60_000),
       is_revoked: true,
     } as never);
     vi.mocked(userService.findById).mockResolvedValue({

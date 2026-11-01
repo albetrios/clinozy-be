@@ -4,7 +4,7 @@ import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js'
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
-import { generateTestToken } from '@/tests/helpers/test-auth.js';
+import { generateSuperAdminToken } from '@/tests/helpers/test-auth.js';
 import type { FastifyInstance } from 'fastify';
 
 /**
@@ -33,7 +33,7 @@ describe('MCP route — POST initialize happy path', () => {
   it('POST /api/v1/mcp answers a JSON-RPC initialize with 200 for a global admin', async () => {
     // SUPER_ADMIN is re-derived per request from GLOBAL_ADMIN_EMAILS (sec-A6).
     const admin = await createTestUser({ email: 'ops@example.com', isEmailVerified: true });
-    const token = await generateTestToken({ userId: admin.public_id, role: 'super_admin' });
+    const token = await generateSuperAdminToken(admin.public_id);
 
     const response = await injectAuthenticated(app, {
       method: 'POST',

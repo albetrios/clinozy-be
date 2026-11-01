@@ -6,9 +6,11 @@ import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import {
   type AppFixture,
+  type AppFixtureRole,
   createAppFixture,
 } from '@/domains/app/__tests__/factories/app-fixture.factory.js';
 import { AppFlow, calendarDay } from '@/domains/app/__tests__/factories/app-flow.factory.js';
+import { generateTestToken } from '@/tests/helpers/test-auth.js';
 
 /**
  * Sub-domain 7, Patients 7.A–7.M (routes-final §7, launch ROUTE #133–#135): the patient file on
@@ -175,6 +177,20 @@ describe('Patients — integration (routes-final §7)', () => {
     service_label: 'Consultation',
     is_walk_in: true,
   });
+
+  /**
+   * Acts as a fixture member on a fresh session with a recent password step-up — what a download
+   * with the medical cells needs (B1-3).
+   */
+  async function asSteppedUp(role: AppFixtureRole): Promise<void> {
+    flow.withToken(
+      await generateTestToken({
+        userId: fixture.members[role].userPublicId,
+        organizationPublicId: fixture.organization.publicId,
+        stepUp: true,
+      }),
+    );
+  }
 
   beforeAll(async () => {
     ({ app } = await createTestApp());
@@ -420,7 +436,16 @@ describe('Patients — integration (routes-final §7)', () => {
     );
     flow.expectValue('follow-up first: Bina', '.data[0].id', binaFile);
     await flow.expect(400, 'an unknown sort', 'GET', '/app/patients?sort=first_name');
+    await flow.expect(
+      403,
+      'the medical cells need a strong step-up (B1-3)',
+      'GET',
+      `/app/patients/exports?q=${lastName}`,
+    );
+    flow.expectValue('why', '.error.detail | test("step-up")', 'true');
+    await asSteppedUp('owner');
     await flow.expect(200, 'export', 'GET', `/app/patients/exports?q=${lastName}`);
+    flow.as('owner');
     flow.expectValue(
       "export: four rows with the contact's name and number",
       `[.data.row_count, (.data.content | test("contact_name")), (.data.content | test("Asha ${lastName}")), (.data.content | test("${digits}51"))] | map(tostring) | join(",")`,
@@ -1221,13 +1246,14 @@ describe('Patients — integration (routes-final §7)', () => {
       'DELETE',
       `/app/patients/${binaFile}?${DELETE_REASON}`,
     );
-    flow.as('pharmacist');
+    await asSteppedUp('pharmacist');
     await flow.expect(
       200,
       'the pharmacist exports (P5)',
       'GET',
       `/app/patients/exports?q=${lastName}`,
     );
+    flow.as('pharmacist');
     await flow.expect(403, 'the pharmacist changes none', 'PATCH', `/app/patients/${binaFile}`, {
       status: 'new',
     });
@@ -1271,7 +1297,7 @@ describe('Patients — integration (routes-final §7)', () => {
         'Penicillin,Pregnancy,Prefers mornings',
       );
     }
-    flow.as('pharmacist');
+    await asSteppedUp('pharmacist');
     await flow.expect(200, 'the pharmacist exports', 'GET', `/app/patients/exports?q=${lastName}`);
     flow.expectValue(
       "the pharmacist's export carries them",
@@ -2106,8 +2132,16 @@ describe('Patients — integration (routes-final §7)', () => {
     await flow.expect(404, 'no delete (PK6)', 'DELETE', `${bought}/${sevenPack}?${DELETE_REASON}`);
     flow.as('front_desk');
     await flow.expect(
+      403,
+      'the front desk adds no unpaid session (payment:update alone, B1-4)',
+      'PATCH',
+      `${bought}/${singleSession}`,
+      { sessions_total: 2 },
+    );
+    flow.as('counsellor');
+    await flow.expect(
       200,
-      'the front desk changes one (payment:update)',
+      'the counsellor does (payment:update and offering:update)',
       'PATCH',
       `${bought}/${singleSession}`,
       { sessions_total: 2 },

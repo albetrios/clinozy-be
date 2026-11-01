@@ -149,8 +149,12 @@ const taskColumns = {
   priority: varchar('priority', { length: 6 }).notNull().default('normal'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(() => users.id),
-  updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(() => users.id),
+  created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(() => users.id, {
+    onDelete: 'set null',
+  }),
+  updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(() => users.id, {
+    onDelete: 'set null',
+  }),
   deleted_at: timestamp('deleted_at', { withTimezone: true }),
   delete_reason: varchar('delete_reason', { length: 20 }),
   delete_note: varchar('delete_note', { length: 280 }),
@@ -336,6 +340,7 @@ export const task_owner_changes = appSchema
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [

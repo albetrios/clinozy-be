@@ -105,3 +105,8 @@ fa8a671fd3301fa2c2e63d273ea8f083f8fcd7ad:src/infrastructure/queue/__tests__/unit
 fa8a671fd3301fa2c2e63d273ea8f083f8fcd7ad:src/tests/contract/request-id-eventbus.contract.test.ts:generic-api-key:17
 fa8a671fd3301fa2c2e63d273ea8f083f8fcd7ad:src/tests/unit/utils/validation/bullmq-job-validation.unit.test.ts:generic-api-key:15
 fa8a671fd3301fa2c2e63d273ea8f083f8fcd7ad:src/tests/unit/utils/validation/bullmq-job-validation.unit.test.ts:generic-api-key:19
+# Scanned since the allowlist was anchored (H-5, 1 Nov 2026): before it, `\.git` skipped every
+# .github/ path. The fake CI JWT keypair this repository refuses on every hosted deploy. The file
+# is a byte-identical copy of clinozy-fe's (src/tests/unit/ci/mirrored-files.policy.unit.test.ts),
+# so its line carries no inline marker; it changes only together with clinozy-fe's copy.
+806c187661052e488e48f5ec73827f9f7ad4678a:.github/actions/test-env/action.yml:private-key:73

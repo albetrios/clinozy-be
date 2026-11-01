@@ -1,6 +1,5 @@
 import { sql } from 'drizzle-orm';
 import {
-  type AnyPgColumn,
   bigint,
   bigserial,
   check,
@@ -12,6 +11,7 @@ import {
   timestamp,
   uniqueIndex,
   varchar,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
@@ -45,13 +45,8 @@ export const patient_reviews = appSchema
       organization_id: bigint('organization_id', { mode: 'number' })
         .notNull()
         .references(() => organizations.id, { onDelete: 'cascade' }),
-      patient_id: bigint('patient_id', { mode: 'number' })
-        .notNull()
-        .references((): AnyPgColumn => patients.id, { onDelete: 'restrict' }),
-      appointment_id: bigint('appointment_id', { mode: 'number' }).references(
-        (): AnyPgColumn => appointments.id,
-        { onDelete: 'set null' },
-      ),
+      patient_id: bigint('patient_id', { mode: 'number' }).notNull(),
+      appointment_id: bigint('appointment_id', { mode: 'number' }),
       source: varchar('source', { length: 13 }).notNull(),
       rating: smallint('rating'),
       text: varchar('text', { length: 2000 }),
@@ -63,16 +58,35 @@ export const patient_reviews = appSchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       deleted_at: timestamp('deleted_at', { withTimezone: true }),
       delete_reason: varchar('delete_reason', { length: 20 }),
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
-      index('idx_patient_reviews_organization_id').on(table.organization_id),
+      uniqueIndex('idx_patient_reviews_organization_id_id').on(table.organization_id, table.id),
+      // The SQL says ON DELETE SET NULL ("appointment_id"): organization_id is kept.
+      foreignKey({
+        name: 'patient_reviews_appointment_fk',
+        columns: [table.organization_id, table.appointment_id],
+        foreignColumns: [appointments.organization_id, appointments.id],
+      }).onDelete('set null'),
+      index('idx_patient_reviews_organization_appointment')
+        .on(table.organization_id, table.appointment_id)
+        .where(sql`${table.appointment_id} IS NOT NULL`),
+      foreignKey({
+        name: 'patient_reviews_patient_fk',
+        columns: [table.organization_id, table.patient_id],
+        foreignColumns: [patients.organization_id, patients.id],
+      }).onDelete('restrict'),
+      index('idx_patient_reviews_organization_patient')
+        .on(table.organization_id, table.patient_id)
+        .where(sql`${table.patient_id} IS NOT NULL`),
       uniqueIndex('idx_patient_reviews_public_id').on(table.public_id),
       index('idx_patient_reviews_patient_date').on(table.patient_id, table.review_date, table.id),
       // Sub-domain 10's call-back rule

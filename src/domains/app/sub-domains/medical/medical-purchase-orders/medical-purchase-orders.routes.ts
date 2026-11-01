@@ -1,6 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT } from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
+import {
+  EXPORT_AUTHED_RATE_LIMIT,
+  ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+} from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
 import { requireOrganizationPermission } from '@/shared/utils/auth/authorization.util.js';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 import type { MedicalPurchaseOrdersService } from './medical-purchase-orders.service.js';
@@ -57,10 +60,10 @@ export function medicalPurchaseOrdersRoutes(
       {
         onRequest: [app.authenticate],
         preHandler: [requireOrganizationPermission(APP_PERMISSIONS.MEDICINE_EXPORT)],
-        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        ...EXPORT_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Export medical purchase orders',
-          description: `The orders CSV (\`medical-purchase-orders-YYYY-MM-DD.csv\`, up to 5,000 rows — \`is_truncated\` when more matched), with the list's filters and sort. ${LIST_QUERY_TEXT} Requires medicine:export and medicine:read.`,
+          description: `The orders CSV (\`medical-purchase-orders-YYYY-MM-DD.csv\`, up to 5,000 rows — \`is_truncated\` when more matched), with the list's filters and sort. ${LIST_QUERY_TEXT} Each download is audited (who, the filters, the row count); at most 5 per 5 minutes per member and 2 at a time per clinic, else a 429 with Retry-After (B1-3, D-4). Requires medicine:export and medicine:read.`,
           tags: ['Medical store'],
           querystring: listMedicalPurchaseOrdersQueryDto,
         },
@@ -90,15 +93,15 @@ export function medicalPurchaseOrdersRoutes(
           requireOrganizationPermission(APP_PERMISSIONS.MEDICINE_EXPORT),
           requireOrganizationPermission(APP_PERMISSIONS.MEDICINE_READ),
         ],
-        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        ...EXPORT_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Export the purchase GST summary',
-          description: `The month's purchase GST summary as a CSV (\`purchase-gst-summary-YYYY-MM.csv\`, in the exports' envelope — \`file_name\`, \`content_type\`, \`row_count\`, \`is_truncated\` (always false), \`content\`): one row per group with its \`section\` (\`by_rate\`, \`by_hsn\`, \`total\`), \`gst_percent\`, \`hsn_code\`, \`line_count\`, \`taxable_amount\`, \`gst_amount\`, \`total_amount\`. ${GST_SUMMARY_TEXT} Requires medicine:export and medicine:read.`,
+          description: `The month's purchase GST summary as a CSV (\`purchase-gst-summary-YYYY-MM.csv\`, in the exports' envelope — \`file_name\`, \`content_type\`, \`row_count\`, \`is_truncated\` (always false), \`content\`): one row per group with its \`section\` (\`by_rate\`, \`by_hsn\`, \`total\`), \`gst_percent\`, \`hsn_code\`, \`line_count\`, \`taxable_amount\`, \`gst_amount\`, \`total_amount\`. ${GST_SUMMARY_TEXT} Each download is audited (who, the filters, the row count); at most 5 per 5 minutes per member and 2 at a time per clinic, else a 429 with Retry-After (B1-3, D-4). Requires medicine:export and medicine:read.`,
           tags: ['Medical store'],
           querystring: medicalPurchaseGstSummaryQueryDto,
         },
       },
-      controller.collectionView('gst-summary-exports'),
+      controller.collectionExport('gst-summary-exports'),
     );
     zodApplication.post(
       '/medical-purchase-orders',
@@ -158,7 +161,7 @@ export function medicalPurchaseOrdersRoutes(
         schema: {
           summary: 'Cancel a medical purchase order',
           description:
-            "Cancels an order not yet received (a received one is a 409 `transition_not_allowed`), with why: `reason` (mistake, supplier_cant_deliver, price_changed, other) and a `note`, required for other. Undo with restore until the organization's purge window ends. Requires medicine:delete.",
+            'Cancels an order not yet received (a received one is a 409 `transition_not_allowed`), with why: `reason` (mistake, supplier_cant_deliver, price_changed, other) and a `note`, required for other. Undo with restore at any time — a financial record is never purged (G2-4). Requires medicine:delete.',
           tags: ['Medical store'],
           params: medicalPurchaseOrdersIdParamsDto,
           querystring: cancelMedicalPurchaseOrderQueryDto,

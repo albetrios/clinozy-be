@@ -14,10 +14,12 @@ import {
 import { AuthSerializer } from '@/domains/auth/auth.serializer.js';
 import { serializeAuthSessions } from '@/domains/auth/sub-domains/auth-session/auth-session.serializer.js';
 import type { AuthContainer } from '@/domains/auth/auth.container.js';
+import { ACCOUNT_SECURITY_NOTICE } from '@/domains/auth/sub-domains/auth-method/events/auth.events.js';
+import { toSupportedLanguage } from '@/shared/constants/i18n.constants.js';
 
 type AuthSessionHandlersDependencies = Pick<
   AuthContainer,
-  'authService' | 'authSessionService' | 'authMeContextService'
+  'authService' | 'authSessionService' | 'authMeContextService' | 'authMethodService'
 >;
 
 /** Builds the session-management Fastify handlers: `logout`, `refreshToken` (cookie + origin allowlist), `listSessions`, `revokeSession`, `revokeAllSessions`, and the active-organization `switch-to-*` handlers. */
@@ -25,6 +27,7 @@ export function createAuthSessionHandlers({
   authService,
   authSessionService,
   authMeContextService,
+  authMethodService,
 }: AuthSessionHandlersDependencies) {
   return {
     logout: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -213,6 +216,11 @@ export function createAuthSessionHandlers({
           action: 'auth.session.revoke_all',
           resource_type: 'session',
         },
+      });
+      await authMethodService.sendAccountSecurityNotice({
+        userPublicId: auth.userId,
+        notice: ACCOUNT_SECURITY_NOTICE.SESSIONS_REVOKED,
+        locale: toSupportedLanguage(request.language),
       });
 
       // sec-r4-A1: do NOT clear the session cookie here. revokeAllSessionsExceptCurrent

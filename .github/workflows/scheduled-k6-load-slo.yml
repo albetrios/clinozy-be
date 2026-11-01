@@ -7,6 +7,10 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
 
+# Read-only at the top (H-14); the two issue jobs grant themselves `issues: write`.
+permissions:
+  contents: read
+
 concurrency:
   group: load-tests-${{ github.ref }}
   cancel-in-progress: false
@@ -122,9 +126,21 @@ jobs:
       - name: Prepare the database with the full demo data (migrations included)
         run: pnpm db:seed:full
 
+      - name: Generate the demo admin's TOTP secret for this run
+        # A platform admin needs an enrolled MFA factor and an MFA-verified session (A-2). The
+        # demo-admin seed enrolls a TOTP factor with DEMO_TOTP_SECRET, and tool:admin-token completes
+        # POST /auth/mfa/login with a code computed from it. A fresh random secret per run, masked in
+        # the log, so no secret is stored in the repository.
+        run: |
+          secret="$(python3 -c 'import base64, os; print(base64.b32encode(os.urandom(20)).decode())')"
+          echo "::add-mask::${secret}"
+          echo "DEMO_TOTP_SECRET=${secret}" >> "$GITHUB_ENV"
+
       - name: Seed the super_admin the admin scenarios sign in as
         # Creates DEMO_EMAIL with DEMO_PASSWORD (the job's demo password) as an active member of the
-        # demo organization. GLOBAL_ADMIN_EMAILS (the test-env export) makes its token super_admin.
+        # demo organization. GLOBAL_ADMIN_EMAILS (the test-env export) makes it a platform admin, so
+        # the seed also enrolls its TOTP factor with DEMO_TOTP_SECRET (job env) — without one,
+        # sign-in never grants super_admin (A-2).
         run: pnpm db:seed:demo-admin
         env:
           DEMO_EMAIL: ops@example.com

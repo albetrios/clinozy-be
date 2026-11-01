@@ -32,6 +32,7 @@ export const updateOrganizationSettingsDto = z
     lead_hold_days: z.number().int().min(1).max(30).optional(),
     reminder_hour: z.number().int().min(0).max(23).optional(),
     retarget_after_days: z.number().int().min(7).max(730).optional(),
+    // The restore window of a deleted app record; clinical and financial ones are never purged (G2-4)
     deleted_record_purge_days: z.number().int().min(1).max(90).optional(),
     security_policy: z
       .record(

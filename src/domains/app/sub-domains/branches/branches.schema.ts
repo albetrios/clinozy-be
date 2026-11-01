@@ -97,12 +97,15 @@ export const branches = appSchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [
+      uniqueIndex('idx_branches_organization_id_id').on(table.organization_id, table.id),
       uniqueIndex('idx_branches_public_id').on(table.public_id),
       // Names are unique per organization, ignoring case — a branch is never deleted (D3, D16).
       uniqueIndex('idx_branches_organization_name_unique').on(

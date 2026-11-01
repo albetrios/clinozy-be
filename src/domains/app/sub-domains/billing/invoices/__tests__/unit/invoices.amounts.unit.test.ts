@@ -117,3 +117,41 @@ describe('computeInvoiceAmounts — worked examples', () => {
     );
   });
 });
+
+/** C-1: a bill's amounts fit their `numeric(12,2)` columns, or the bill is refused before any write. */
+describe('computeInvoiceAmounts — the money columns hold every amount (C-1)', () => {
+  it('takes a bill of exactly ₹9,999,999,999.99', () => {
+    const amounts = computeInvoiceAmounts({
+      lines: [line({ rate: 9_999_999_999.99, gstPercent: 0 })],
+      overallDiscount: 0,
+    });
+    expect(amounts.total).toBe(9_999_999_999.99);
+  });
+
+  it('refuses one line whose quantity × rate runs past it (422 amount_too_large)', () => {
+    expect(() =>
+      computeInvoiceAmounts({
+        lines: [line({ rate: 9_999_999_999.99, quantity: 999, gstPercent: 0 })],
+        overallDiscount: 0,
+      }),
+    ).toThrow(expect.objectContaining({ statusCode: 422, reason: 'amount_too_large' }));
+  });
+
+  it('refuses lines that each fit but together do not', () => {
+    expect(() =>
+      computeInvoiceAmounts({
+        lines: Array.from({ length: 50 }, () => line({ rate: 9_000_000_000, gstPercent: 0 })),
+        overallDiscount: 0,
+      }),
+    ).toThrow(expect.objectContaining({ statusCode: 422 }));
+  });
+
+  it('refuses a line GST on top lifts past it', () => {
+    expect(() =>
+      computeInvoiceAmounts({
+        lines: [line({ rate: 9_000_000_000, gstPercent: 18 })],
+        overallDiscount: 0,
+      }),
+    ).toThrow(expect.objectContaining({ statusCode: 422 }));
+  });
+});

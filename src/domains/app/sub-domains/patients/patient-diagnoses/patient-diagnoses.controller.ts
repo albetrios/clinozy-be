@@ -5,7 +5,12 @@ import type { PatientDiagnosisOutput } from './patient-diagnoses.types.js';
 /** HTTP handlers for the `patient-diagnoses` routes — {@link BaseRecordController} on {@link PatientDiagnosesService}. */
 export class PatientDiagnosesController extends BaseRecordController<PatientDiagnosisOutput> {
   constructor(service: PatientDiagnosesService) {
-    super(service, { resource: 'patient_diagnosis', idParam: 'patient_diagnosis_id' });
+    // G2-3: a clinical record's reads are audited
+    super(service, {
+      resource: 'patient_diagnosis',
+      idParam: 'patient_diagnosis_id',
+      auditReads: true,
+    });
   }
 }
 

@@ -1,4 +1,5 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
+import { UPLOAD_RECORD_RESOURCE } from '@/domains/app/base-record.types.js';
 import { memberReference } from '@/domains/app/app-member-reference.js';
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import type { BaseRecordReference } from '@/domains/app/base-record.types.js';
@@ -69,6 +70,10 @@ export class ContactActivitiesService extends BaseRecordService<ContactActivityO
   constructor(organizationService: OrganizationService, repository: ContactActivitiesRepository) {
     super(organizationService, {
       label: 'Contact activity',
+      // C-2: the upload keys the record holds — each bound to it on its first attach
+      uploadFields: [
+        { field: 'attachment_keys', resource: UPLOAD_RECORD_RESOURCE.CONTACT_ACTIVITY },
+      ],
       repository,
       parseCreate: refuseGenericContactActivity,
       namedCreates: {

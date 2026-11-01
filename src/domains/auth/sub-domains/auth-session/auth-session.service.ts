@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { NotFoundError, UnauthorizedError } from '@/shared/errors/index.js';
 import { MAX_ACTIVE_SESSIONS_PER_USER } from '@/shared/constants/security.constants.js';
 import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
+import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import { generateRefreshSecret, isIssuedRefreshSecret } from '@/domains/auth/auth.http.util.js';
 import {
@@ -110,6 +111,34 @@ export class AuthSessionService {
         .filter((sessionTokenHash): sessionTokenHash is string => Boolean(sessionTokenHash))
         .map((sessionTokenHash) => invalidateCachedSessionToken(sessionTokenHash)),
     );
+  }
+
+  /**
+   * Revokes a session `POST /auth/refresh` found lapsed (idle or past its absolute lifetime) and
+   * drops its access token from the validity cache.
+   *
+   * @remarks
+   * - **Algorithm:** one `UPDATE … SET is_revoked = true` by session public id and owner, under the
+   *   session's own artifact context (the caller holds no bearer), then a cache purge.
+   * - **Failure modes:** none — an already-revoked or missing row is a no-op.
+   * - **Side effects:** writes `auth.sessions`; invalidates the session-token cache entry.
+   * - **Notes:** E-2 — a lapsed session is ended, not merely refused, so its last access token stops
+   *   authenticating within the cache window too.
+   */
+  async revokeLapsedSession({
+    sessionPublicId,
+    userId,
+  }: {
+    sessionPublicId: string;
+    userId: number;
+  }): Promise<void> {
+    const revoked = await withAppDatabaseContext({
+      scope: SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
+      callback: (_databaseHandle) => this.sessionRepository.revoke(sessionPublicId, userId),
+    });
+    if (revoked?.token_hash) {
+      await invalidateCachedSessionToken(revoked.token_hash);
+    }
   }
 
   async revokeAllSessions(userPublicId: string): Promise<void> {
@@ -265,12 +294,36 @@ export class AuthSessionService {
       throw new UnauthorizedError('errors:accountNotActive');
     }
 
+    // E-2: the idle timeout counts from the session's last REQUEST, not only its last refresh —
+    // with reactive refresh a reader's token lapses mid-page, and without this the idle clock would
+    // have started at the previous refresh. Runs on the cache-miss path only, so at most once per
+    // cache window per token. Best-effort: a failed touch never refuses an authenticated request.
+    await this.touchSessionActivity({ sessionTokenHash, sessionPublicId: session.public_id });
+
     await setCachedSessionTokenValid({
       sessionTokenHash,
       sessionPublicId: session.public_id,
       sessionExpiresAt: session.expires_at,
     });
     return { sessionPublicId: session.public_id };
+  }
+
+  private async touchSessionActivity({
+    sessionTokenHash,
+    sessionPublicId,
+  }: {
+    sessionTokenHash: string;
+    sessionPublicId: string;
+  }): Promise<void> {
+    try {
+      await withAppDatabaseContext({
+        scope: SESSION_SCOPE.ARTIFACT({ sessionTokenHash: sessionTokenHash }),
+        callback: (_databaseHandle) => this.sessionRepository.updateLastActiveAt(sessionPublicId),
+      });
+    } catch (error) {
+      // safe-catch: the touch only moves the idle clock; the request is already authenticated.
+      logger.warn({ error, session_public_id: sessionPublicId }, 'auth.session.touch.failed');
+    }
   }
 
   /**

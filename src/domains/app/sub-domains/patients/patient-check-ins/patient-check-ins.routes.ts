@@ -36,7 +36,7 @@ export function patientCheckInsRoutes(service: PatientCheckInsService): FastifyP
         schema: {
           summary: "List a patient's check-ins",
           description:
-            "Returns one page of a patient's check-ins (newest `check_in_date` first; `sort=created_at` by logging time), each with `score_change` against the previous check-in (the ▲▼ trend), `next_offering_ids` (its plan rows), `actions` (what was done about it, newest first) and `needs_action` — feel `worse` or a score ≤ 4 with no action logged (TR9). Filters: `feel` (several, comma-separated), `needs_action`, `patient_treatment_id`, `appointment_id`, `check_in_date_from` / `check_in_date_to` (whole days, inclusive), the created range. Requires patient:read.",
+            "Returns one page of a patient's check-ins (newest `check_in_date` first; `sort=created_at` by logging time), each with `score_change` against the previous check-in (the ▲▼ trend), `next_offering_ids` (its plan rows), `actions` (what was done about it, newest first) and `needs_action` — feel `worse` or a score ≤ 4 with no action logged (TR9). Filters: `feel` (several, comma-separated), `needs_action`, `patient_treatment_id`, `appointment_id`, `check_in_date_from` / `check_in_date_to` (whole days, inclusive), the created range. The clinical text — `context`, `followed_note`, `current_state`, `next_plan` — is null unless the caller holds patient:clinical_record:read, patient:update or patient_prescription:read (B1-1). Requires patient:read.",
           tags: ['Patient file'],
           params: patientCheckInsParentParamsDto,
           querystring: listPatientCheckInsQueryDto,
@@ -70,7 +70,7 @@ export function patientCheckInsRoutes(service: PatientCheckInsService): FastifyP
         schema: {
           summary: 'Get a check-in',
           description:
-            "Returns one of a patient's check-ins with its trend, plan rows and actions — another patient's, or a deleted one, is a 404. Requires patient:read.",
+            "Returns one of a patient's check-ins with its trend, plan rows and actions — another patient's, or a deleted one, is a 404. The clinical text — `context`, `followed_note`, `current_state`, `next_plan` — is null unless the caller holds patient:clinical_record:read, patient:update or patient_prescription:read (B1-1). Requires patient:read.",
           tags: ['Patient file'],
           params: patientCheckInsIdParamsDto,
         },
@@ -98,12 +98,15 @@ export function patientCheckInsRoutes(service: PatientCheckInsService): FastifyP
       '/patients/:patient_id/check-ins/:patient_check_in_id',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE)],
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_DELETE),
+        ],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Delete a check-in',
           description:
-            "Deletes a check-in with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Restorable until the organization's purge window ends (D38). Requires patient:update.",
+            'Deletes a check-in with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Restorable at any time — a clinical record is never purged (G2-4). Requires patient:update and patient:delete (B1-2).',
           tags: ['Patient file'],
           params: patientCheckInsIdParamsDto,
           querystring: recordDeleteQuerySchema,
@@ -115,12 +118,15 @@ export function patientCheckInsRoutes(service: PatientCheckInsService): FastifyP
       '/patients/:patient_id/check-ins/:patient_check_in_id/restore',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE)],
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_DELETE),
+        ],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Restore a check-in',
           description:
-            "Undoes a check-in's delete. A live check-in is a 409 `record_not_deleted`. Requires patient:update.",
+            "Undoes a check-in's delete. A live check-in is a 409 `record_not_deleted`. Requires patient:update and patient:delete (B1-2).",
           tags: ['Patient file'],
           params: patientCheckInsIdParamsDto,
         },

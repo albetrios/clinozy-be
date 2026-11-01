@@ -8,6 +8,7 @@ import {
   ValidationError,
 } from '@/shared/errors/index.js';
 import { assertUserAccountActive } from '@/shared/utils/auth/account-status.util.js';
+import { rateLimitIpKey } from '@/shared/utils/http/rate-limit-ip-key.util.js';
 import { isDisposableEmailBlocked } from '@/shared/utils/text/email.util.js';
 import { resolveAccessTokenRoleForUser } from '@/shared/utils/auth/global-admin-role.util.js';
 import { MFA_AUTHENTICATION_METHOD, signAccessToken } from '@/shared/utils/security/jwt.util.js';
@@ -25,6 +26,10 @@ import { incrementWithExpiryOnFirst } from '@/shared/utils/infrastructure/redis-
 import type { UserService } from '@/domains/user/user.service.js';
 import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
 import type { AuthSessionService } from './sub-domains/auth-session/auth-session.service.js';
+import {
+  findSessionLapse,
+  SESSION_LAPSE_REASON,
+} from './sub-domains/auth-session/session-lifetime.js';
 import type { MfaService } from './sub-domains/auth-mfa/auth-mfa.service.js';
 import type { AuthMethodService } from './sub-domains/auth-method/auth-method.service.js';
 import { validateLogin } from './auth.validator.js';
@@ -118,7 +123,9 @@ export class AuthService {
   ) {}
 
   private buildIpKey(ipAddress: string): string {
-    return `${IP_FAILED_LOGIN_KEY_PREFIX}${createHash('sha256').update(ipAddress).digest('hex')}`;
+    // The bucket is the caller's rate-limit identity (an IPv6 /64, not the full address — D-3).
+    const bucket = rateLimitIpKey(ipAddress);
+    return `${IP_FAILED_LOGIN_KEY_PREFIX}${createHash('sha256').update(bucket).digest('hex')}`;
   }
 
   /**
@@ -378,8 +385,33 @@ export class AuthService {
       throw new UnauthorizedError('errors:invalidOrExpiredSession');
     }
 
+    // E-2: the server owns the idle and absolute limits. A live session idle past
+    // AUTH_SESSION_IDLE_TIMEOUT_SECONDS, or older than AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS, is
+    // revoked and refused with the `error.reason` clinozy-fe reads to say why. A revoked row skips
+    // this and reaches the reuse detection below (sec-re-05).
+    if (!session.is_revoked) {
+      const lapse = findSessionLapse({
+        createdAt: session.created_at,
+        lastActiveAt: session.last_active_at,
+        expiresAt: session.expires_at,
+      });
+      if (lapse !== null) {
+        await this.authSessionService.revokeLapsedSession({
+          sessionPublicId,
+          userId: session.user_id,
+        });
+        throw new UnauthorizedError(
+          lapse === SESSION_LAPSE_REASON.IDLE_TIMEOUT
+            ? 'errors:sessionIdleTimeout'
+            : 'errors:sessionExpired',
+        ).withReason(lapse);
+      }
+    }
+
     if (new Date(session.expires_at) <= new Date()) {
-      throw new UnauthorizedError('errors:sessionExpired');
+      throw new UnauthorizedError('errors:sessionExpired').withReason(
+        SESSION_LAPSE_REASON.SESSION_EXPIRED,
+      );
     }
 
     const user = await this.userService.findById(session.user_id);
@@ -416,6 +448,7 @@ export class AuthService {
           email: user.email,
           status: user.status,
           isEmailVerified: user.is_email_verified,
+          isMfaEnabled: user.is_mfa_enabled,
         }),
         organizationPublicId,
         authenticationMethods: sessionMfaVerified ? [MFA_AUTHENTICATION_METHOD] : undefined,
@@ -592,6 +625,7 @@ export class AuthService {
         email: user.email,
         status: user.status,
         isEmailVerified: user.is_email_verified,
+        isMfaEnabled: user.is_mfa_enabled,
       }),
       organizationPublicId: organization.public_id,
       authenticationMethods: sessionMfaVerified ? [MFA_AUTHENTICATION_METHOD] : undefined,

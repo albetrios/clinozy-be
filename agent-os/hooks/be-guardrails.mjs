@@ -6,25 +6,38 @@
 // WARN (systemMessage): edits to protected paths, cross-domain imports in a service, and a
 //   `git push` of auth, RLS, billing, migration or route changes with no clean
 //   /be-pre-merge-review recorded for HEAD (`pnpm agent-os:review-clean` records it).
-// Nothing here asks: the permission mode decides every call no rule blocks.
+// Nothing here asks (the settings ask before a push or a merge); the permission mode decides
+// every call no rule blocks.
 //
-// Reads the PreToolUse payload on stdin. Fail-open by design: any parse/read
-// error allows the tool (exit 0) so a guardrail bug can never brick the agent.
+// Reads the PreToolUse payload on stdin (_be-hook.mjs). Fails CLOSED (H-6): a payload it cannot
+// read, a rule module it cannot load, or an error while it checks blocks the call (exit 2, the
+// reason on stderr) — a guard that lets the call through whenever it breaks guards nothing. Only
+// _be-hook.mjs (Node built-ins alone) is imported statically; the rest loads after failClosed().
+// The WARN path (the push review gate) still fails open: a warning is advice, not a block.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
+  failClosed,
   isInsideRepository,
-  readHookPayload,
+  readGuardPayload,
   repositoryRoot,
   showSystemMessage,
   writePermissionDecision,
 } from "./_be-hook.mjs";
-import { destructiveShellReason, isReadableSecretPath, withoutQuotedText } from "./_be-guard-rules.mjs";
-import { pushDirectory } from "./_be-push-target.mjs";
-import { recordTelemetry } from "./_be-telemetry.mjs";
 
-const payload = readHookPayload() ?? process.exit(0);
+const blockUnchecked = failClosed("be-guardrails");
+const [
+  { destructiveShellReason, isReadableSecretPath, withoutQuotedText },
+  { pushDirectory },
+  { recordTelemetry },
+] = await Promise.all([
+  import("./_be-guard-rules.mjs"),
+  import("./_be-push-target.mjs"),
+  import("./_be-telemetry.mjs"),
+]).catch(blockUnchecked);
+
+const payload = readGuardPayload("be-guardrails") ?? process.exit(0);
 
 const tool = payload.tool_name || "";
 const input = payload.tool_input || {};

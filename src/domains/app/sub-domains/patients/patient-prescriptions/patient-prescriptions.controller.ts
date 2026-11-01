@@ -7,6 +7,8 @@ export class PatientPrescriptionsController extends BaseRecordController<Patient
   constructor(service: PatientPrescriptionsService) {
     super(service, {
       resource: 'patient_prescription',
+      // G2-3: a clinical record's reads are audited
+      auditReads: true,
       idParam: 'patient_prescription_id',
       parentParam: 'patient_id',
     });

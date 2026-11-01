@@ -1,5 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { requireRecentStepUpPreHandler } from '@/shared/middlewares/core/recent-step-up.middleware.js';
+import {
+  requireRecentStepUpPreHandler,
+  requireRecentStepUpWhenBodyHas,
+} from '@/shared/middlewares/core/recent-step-up.middleware.js';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
   EXPENSIVE_AUTHED_RATE_LIMIT,
@@ -131,12 +134,16 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Update organization',
           description:
-            'Updates organization details (name, slug, status, logo). Requires ORGANIZATION_UPDATE permission.',
+            "Updates organization details (name, slug, specialties, timezone, status). Requires ORGANIZATION_UPDATE permission. `status` is the owner's alone (403 `owner_only` for anyone else, an API key included) and needs a recent step-up on this session (`POST /auth/step-up`, within 10 minutes). A SUSPENDED or ARCHIVED organization grants its members no permission, refuses its API keys and cannot be switched into — except by its owner, who keeps organization:read and organization:update to reactivate it.",
           tags: ['Organization'],
           body: updateOrganizationDto,
         },
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.ORGANIZATION_UPDATE)],
+        preHandler: [
+          requireOrganizationPermission(TENANCY_PERMISSIONS.ORGANIZATION_UPDATE),
+          // B2-3: suspending the clinic locks everyone out — a stolen token alone must not do it.
+          requireRecentStepUpWhenBodyHas('status'),
+        ],
       },
       organizationController.updateOrganization,
     );
@@ -152,7 +159,7 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Delete organization',
           description:
-            'Deletes an organization: it disappears from every read at once, its uploads are tombstoned and its subscription is canceled, and the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires ORGANIZATION_DELETE permission. Requires a recent step-up on this session (`POST /auth/step-up`, within 10 minutes).',
+            'Deletes an organization: it disappears from every read at once, its uploads are tombstoned and its subscription is canceled, and the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires ORGANIZATION_DELETE permission, and only the organization owner may delete it (403 `owner_only` for anyone else, an API key included). Requires a recent step-up on this session (`POST /auth/step-up`, within 10 minutes).',
           tags: ['Organization'],
         },
         onRequest: [app.authenticate],
@@ -243,7 +250,7 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Update organization settings',
           description:
-            'Updates organization settings — notifications, locale, security policy and the operating settings. Requires ORGANIZATION_UPDATE permission.',
+            'Updates organization settings — notifications, locale, security policy and the operating settings. `deleted_record_purge_days` (1–90) is how long a deleted app record stays restorable before the daily purge erases it — never a clinical or a financial record, which is kept for good. Requires ORGANIZATION_UPDATE permission.',
           tags: ['Organization Settings'],
           body: updateOrganizationSettingsDto,
         },
@@ -311,7 +318,7 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Update API key',
           description:
-            'Updates an API key (name or status). Requires API_KEY_MANAGE permission. Reactivating a revoked key (status REVOKED → ACTIVE) is a fresh grant of its scopes: the caller must be a user holding every scope on the key (403 otherwise; API-key principals are refused).',
+            "Updates an API key (name or status). Requires API_KEY_MANAGE permission. Reactivating a revoked key (status REVOKED → ACTIVE) is a fresh grant of its scopes: the caller must be a user holding every scope on the key (403 otherwise; API-key principals are refused). A key another member created is changed, rotated or deleted only by a caller holding every code its creator holds (403 otherwise) — a lower-ranked manager cannot touch the owner's or an Admin's keys.",
           tags: ['API Key'],
           params: apiKeyIdParamsDto,
           body: updateOrganizationApiKeyDto,
@@ -331,7 +338,7 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Delete API key',
           description:
-            'Deletes an API key: it stops authenticating at once and the row is hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires API_KEY_MANAGE permission.',
+            "Deletes an API key: it stops authenticating at once and the row is hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires API_KEY_MANAGE permission. A key another member created is changed, rotated or deleted only by a caller holding every code its creator holds (403 otherwise) — a lower-ranked manager cannot touch the owner's or an Admin's keys.",
           tags: ['API Key'],
           params: apiKeyIdParamsDto,
         },
@@ -347,7 +354,7 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Rotate API key',
           description:
-            'Regenerates the API key secret. The old key is immediately invalidated. Requires a user principal with API_KEY_MANAGE permission.',
+            "Regenerates the API key secret. The old key is immediately invalidated. Requires a user principal with API_KEY_MANAGE permission. A key another member created is changed, rotated or deleted only by a caller holding every code its creator holds (403 otherwise) — a lower-ranked manager cannot touch the owner's or an Admin's keys.",
           tags: ['API Key'],
           params: apiKeyIdParamsDto,
         },

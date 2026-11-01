@@ -44,5 +44,5 @@ stateDiagram-v2
 - **Outcomes**: 2xx → `SENT`. `410 Gone` → `FAILED` with no retry, the webhook is turned off (its owner re-enables it), the job completes. Any other receiver failure → `FAILED` + retry; the final one reaches the dead-letter ledger at warn level without a Sentry page (`WebhookEndpointFailure.expectedFinalFailure`). An unreadable or empty signing secret, or a missing attempt row, is our fault: `UnrecoverableError`, recorded and alerted.
 - A disabled or deleted webhook is re-checked at claim time: the attempt is recorded `FAILED` (`webhook_disabled`) and skipped.
 - The dashboard history read (`listByWebhook`) takes a `webhook_id` the controller already resolved for the active organization (`getWebhookId(public_id, organization_id)`), and the `webhook_delivery_attempts_tenant_isolation` RLS policy backstops it — a foreign `webhook_id` returns zero rows, so no extra organization predicate is needed on the page read.
-- SSRF protections and pinned DNS apply in the worker outbound fetch path.
+- SSRF protections and pinned DNS apply in the worker outbound fetch path — always: only an explicitly injected `fetchImplementation` (the test seam) bypasses the pinned fetch, never a replaced `globalThis.fetch` (C-4).
 - Tombstone retention for old delivery rows stays on the parent `webhook/workers/` aggregate.

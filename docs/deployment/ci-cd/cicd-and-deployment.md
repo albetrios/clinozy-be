@@ -227,10 +227,10 @@ sequenceDiagram
 
 Steps in each deploy workflow:
 
-1. Checkout code, install dependencies (migrations only — no app `pnpm build`).
+1. Checkout code, install dependencies (migrations only — no app `pnpm build`), and install the Railway CLI at its pin (`tooling/ci/install-railway-cli.sh`: `RAILWAY_VERSION`, SHA-256-verified). No secret is in the job's env until both installs are done (H-2): the steps that read the GitHub Environment name `GH_SECRETS_JSON` themselves, and the export step then hands it to the steps after it.
 2. Run `pnpm validate:github-env-runtime` against the exported GitHub environment (schema-required keys present).
 3. **Log expected scanned CI image refs from GHCR** — default `ghcr.io/<owner>/<repo>/clinozy-be-api:<commit-sha>` and `clinozy-be-worker:<commit-sha>`; optional secrets **`GHCR_API_IMAGE`** / **`GHCR_WORKER_IMAGE`** override the logged ref. These are the exact refs the next step pins onto Railway.
-4. Run `pnpm db:migrate` + `pnpm db:seed` (reference data), install Railway CLI, sync app env vars with `railway variable set`.
+4. Run `pnpm db:migrate` + `pnpm db:seed` (reference data), sync app env vars with `railway variable set`.
 5. Deploy API + worker with **`pnpm tool:railway-deploy-image --service <id> --image <ghcr-ref> --label <api|worker>`** (`tooling/setup/railway/deploy-image.ts`). For each service the tool calls the Railway GraphQL API to (a) resolve the project-token scope with **`projectToken { projectId environmentId }`** using the `Project-Access-Token` header; (b) **`serviceInstanceUpdate`** with `{ source: { image } }` so the service is pinned to the freshly built, Trivy-scanned image; (c) **`serviceInstanceDeployV2(serviceId, environmentId)`** to create a brand-new deployment from the updated configuration; (d) poll `deployment(id)` until terminal status; (e) **boot verification** — the workflow passes `--boot-ready-marker` / `--boot-crash-marker` for both services (`Server listening` / `Server failed to start` for the API, `Worker started` / `Worker failed to start` for the worker, plus `uncaughtException` for both), and after SUCCESS the tool polls `deployment(id)` and `deploymentLogs(id)` for a 90 s window, failing on a crash marker, on the status leaving SUCCESS, or on a missing ready marker. Railway's SUCCESS alone is **not** a gate: it is set when the container starts (Railway runs no Dockerfile `HEALTHCHECK`), before the boot guards have run, so a crash-looping process reads SUCCESS — production shipped five such worker releases in October 2026 before this check existed. The hard deploy gates are therefore boot verification for both services, the API `/readyz` + surface probe, and the post-deploy API smoke. A project token that cannot read deployments fails the deploy when boot verification is on (a gate that cannot observe must not pass). Worker readiness is **not** probed from the GitHub runner because Postgres/Redis sit on Railway's private network (`*.railway.internal`) which is unreachable from public CI hosts — its container logs are the one observable signal.
 
 > **Why not `railway redeploy` / `railway up`?** The Railway CLI's `redeploy` re-runs the previous deployment object with its existing image tag (community discussion confirms `serviceInstanceRedeploy` ignores configuration changes made between deployments), and the CLI has no `--image` flag. `railway up` uploads the runner's source for Railway to build, bypassing the scanned GHCR image entirely. The GraphQL-based tool is the only reliable way to deploy the image CI just built — and the same path handles both the initial bootstrap (no prior deployment) and steady-state redeploys, so no fallback branch is needed.
@@ -420,8 +420,8 @@ After this, pushes to **main** will run the deploy workflow. No keys or tokens a
 **Install**
 
 ```bash
-npm i -g @railway/cli
-# or: brew install railway
+brew install railway
+# or, on Linux, the version the deploy runs: sudo bash tooling/ci/install-railway-cli.sh
 ```
 
 **One-time login** — `railway login` (opens browser).
@@ -465,7 +465,7 @@ gh secret set DATABASE_URL --env development --body "postgresql://..."
 
 | Step                   | Railway                                           | GitHub                                                                          |
 | ---------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Install                | `npm i -g @railway/cli` or `brew install railway` | `brew install gh`                                                               |
+| Install                | `brew install railway` or `tooling/ci/install-railway-cli.sh` (the deploy's pin) | `brew install gh`                                                               |
 | Auth                   | `railway login`                                   | `gh auth login`                                                                 |
 | Create project/service | `railway init` then `railway add`                 | Create environments development, production in repo Settings                    |
 | Get service ID         | `railway status --json`                           | —                                                                               |

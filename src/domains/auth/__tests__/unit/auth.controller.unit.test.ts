@@ -34,7 +34,8 @@ vi.mock('@/shared/config/env.config.js', () => {
   const env = {
     NODE_ENV: 'development',
     LOG_LEVEL: 'silent',
-    AUTH_SESSION_MAX_AGE_DAYS: 7,
+    AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS: 43_200,
+    AUTH_SESSION_IDLE_TIMEOUT_SECONDS: 1800,
     COOKIE_SECURE: false,
     DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
     DATABASE_SSL_ENABLED: false,
@@ -110,6 +111,7 @@ describe('createAuthController', () => {
     forgotPassword: vi.fn().mockResolvedValue({ messageKey: 'success:forgotPassword' }),
     resetPassword: vi.fn().mockResolvedValue(undefined),
     changePassword: vi.fn().mockResolvedValue(undefined),
+    sendAccountSecurityNotice: vi.fn().mockResolvedValue(undefined),
   };
 
   const emailLoginService = {
@@ -136,7 +138,7 @@ describe('createAuthController', () => {
   };
 
   const mfaService = {
-    verify: vi.fn().mockResolvedValue({ verified: true }),
+    verify: vi.fn().mockResolvedValue({ verified: true, factor: 'mfa' }),
     // sec-A finding #3: two-phase enrollment. `enrollInit` stages the secret in Redis and
     // returns only `{ secret, provisioning_uri }`; `enrollConfirm` verifies a code and
     // returns the freshly minted plaintext recovery codes plus the method_id.

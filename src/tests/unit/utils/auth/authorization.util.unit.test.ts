@@ -71,6 +71,38 @@ describe('authorization.util', () => {
       ).rejects.toThrow(ForbiddenError);
     });
 
+    it('A-2: refuses a super_admin whose session has not proved a second factor', async () => {
+      const handler = requireRole(GLOBAL_ROLES.SUPER_ADMIN);
+      await expect(
+        handler(
+          mockRequest({
+            auth: { kind: 'user' as const, userId: 'user-1', role: GLOBAL_ROLES.SUPER_ADMIN },
+          }),
+          mockReply,
+        ),
+      ).rejects.toMatchObject({
+        messageKey: 'errors:superAdminRequiresMfa',
+        reason: 'mfa_required',
+      });
+    });
+
+    it('A-2: admits a super_admin on an MFA-verified session', async () => {
+      const handler = requireRole(GLOBAL_ROLES.SUPER_ADMIN);
+      await expect(
+        handler(
+          mockRequest({
+            auth: {
+              kind: 'user' as const,
+              userId: 'user-1',
+              role: GLOBAL_ROLES.SUPER_ADMIN,
+              mfaVerified: true,
+            },
+          }),
+          mockReply,
+        ),
+      ).resolves.toBeUndefined();
+    });
+
     it('throws UnauthorizedError when not authenticated', async () => {
       const handler = requireRole(GLOBAL_ROLES.USER);
       await expect(handler(mockRequest({ auth: null }), mockReply)).rejects.toThrow(

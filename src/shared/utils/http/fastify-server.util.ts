@@ -47,11 +47,21 @@ export const PINO_REDACT_PATHS = [...SENSITIVE_KEY_FRAGMENTS, ...PINO_REDACT_NES
 
 /**
  * Resolves the Fastify `trustProxy` value from the validated env. `TRUST_PROXY` is parsed
- * by the schema into `false | number` (a hop count); this normalizes to the shape Fastify
- * accepts and never trusts a bare boolean `true`.
+ * by the schema into `false | number | string[]` (a hop count, or the trusted proxy
+ * addresses); this normalizes to the shape Fastify accepts and never trusts a bare boolean `true`.
+ *
+ * @remarks
+ * - **Algorithm:** an address list passes through (Fastify compiles it with `proxy-addr`, so a
+ *   hop is trusted only when its peer address is in the list — D-6); a hop count compiles to
+ *   the "first n hops" predicate; anything else is `false`.
+ * - **Failure modes:** none; the schema has already refused every other value.
+ * - **Side effects:** none.
  */
-export function resolveTrustProxy(): boolean | TrustProxyFunction {
+export function resolveTrustProxy(): boolean | string[] | TrustProxyFunction {
   const trustProxy = env.TRUST_PROXY;
+  if (Array.isArray(trustProxy)) {
+    return [...trustProxy];
+  }
   if (typeof trustProxy === 'number') {
     // fastify@5.12 removed `number` from the trustProxy TYPE; the runtime hop
     // semantics ("trust the first n hops") are preserved by compiling the env

@@ -11,11 +11,15 @@ import {
   AppError,
   ConflictError,
   ERROR_CODE_TO_SNAKE,
+  UnprocessableEntityError,
   ValidationError,
   type ValidationErrorItem,
 } from '@/shared/errors/index.js';
 import { EXTERNAL_ERROR_MESSAGE } from '@/shared/constants/index.js';
-import { isPostgresLockTimeout } from '@/shared/utils/infrastructure/postgres-error.util.js';
+import {
+  getPostgresErrorCode,
+  isPostgresLockTimeout,
+} from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { captureException } from '@/infrastructure/observability/sentry/sentry.js';
 import { toClientFacingOutboundError } from '@/infrastructure/outbound/outbound-error.js';
@@ -528,6 +532,40 @@ function handleFastifyClientErrorResponse({
   };
 }
 
+/**
+ * Postgres failures that are the request colliding with the data, not a server fault, and the
+ * client error each one answers with (`docs/reference/api/response-codes.md`): a foreign key
+ * (`23503` — the record points at, or is still pointed at by, another one) and a deadlock or
+ * serialization failure (`40P01`, `40001` — retrying succeeds) are 409; a CHECK constraint
+ * (`23514`) and a number out of range (`22003`) are 422. Without these they were 500s, logged and
+ * sent to Sentry with the statement's bound values (C-1).
+ */
+const POSTGRES_CLIENT_ERRORS: Readonly<Record<string, () => AppError>> = {
+  '23503': () => new ConflictError('errors:databaseReferenceConflict'),
+  '23514': () => new UnprocessableEntityError('errors:databaseCheckViolation'),
+  '22003': () => new UnprocessableEntityError('errors:databaseNumericOutOfRange'),
+  '40P01': () => new ConflictError('errors:resourceBusy'),
+  '40001': () => new ConflictError('errors:resourceBusy'),
+};
+
+/**
+ * The client error for a Postgres failure listed in {@link POSTGRES_CLIENT_ERRORS}, or
+ * `undefined`. Logs it at warn — `code` / `constraint` / `table` only, the logger's sanitizer
+ * withholds the statement — and does not send it to Sentry.
+ */
+function resolvePostgresClientError({
+  error,
+  requestId,
+}: {
+  error: unknown;
+  requestId: string;
+}): AppError | undefined {
+  const code = getPostgresErrorCode(error);
+  if (code === undefined || !Object.hasOwn(POSTGRES_CLIENT_ERRORS, code)) return undefined;
+  logger.warn({ requestId, error }, 'request.database_client_error');
+  return POSTGRES_CLIENT_ERRORS[code]?.();
+}
+
 /** Inputs for {@link resolveAppError}. */
 interface ResolveAppErrorOptions {
   error: unknown;
@@ -645,6 +683,16 @@ const errorHandlerMiddlewarePlugin: FastifyPluginAsync = async (app) => {
     const appError = resolveAppError({ error, requestId: currentRequestId });
     if (appError) {
       return replyWithAppError({ appError, request, reply, requestId: currentRequestId });
+    }
+
+    const databaseClientError = resolvePostgresClientError({ error, requestId: currentRequestId });
+    if (databaseClientError) {
+      return replyWithAppError({
+        appError: databaseClientError,
+        request,
+        reply,
+        requestId: currentRequestId,
+      });
     }
 
     if (error instanceof ZodError) {

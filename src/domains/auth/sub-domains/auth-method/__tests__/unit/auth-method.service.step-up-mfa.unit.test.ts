@@ -23,7 +23,14 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   };
 });
 
-import { ForbiddenError, UnauthorizedError } from '@/shared/errors/index.js';
+import type { Redis } from 'ioredis';
+import { ForbiddenError, NotFoundError, UnauthorizedError } from '@/shared/errors/index.js';
+import {
+  ACCOUNT_LOCKOUT_MINUTES,
+  MAX_FAILED_LOGIN_ATTEMPTS,
+  MAX_PASSWORD_STEP_UP_ATTEMPTS,
+  PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS,
+} from '@/shared/constants/security.constants.js';
 import { AuthMethodService } from '@/domains/auth/sub-domains/auth-method/auth-method.service.js';
 import { verifyPassword } from '@/shared/utils/security/password.util.js';
 import type { UserService } from '@/domains/user/user.service.js';
@@ -45,20 +52,33 @@ import type { AuthSessionService } from '@/domains/auth/sub-domains/auth-session
 describe('AuthMethodService.verifyPasswordForStepUp — MFA bypass guard (sec-A1)', () => {
   const userService = {
     requireUserRecordByPublicId: vi.fn(),
+    registerFailedLoginAttempt: vi.fn(),
   } as unknown as UserService;
   const authMethodRepository = {} as AuthMethodRepository;
   const verificationTokenRepository = {} as VerificationTokenRepository;
-  const authSessionService = {} as AuthSessionService;
+  const authSessionService = { revoke: vi.fn() } as unknown as AuthSessionService;
+  /** In-memory stand-in for the attempt counter: `eval` is the INCR-with-expiry script. */
+  const counters = new Map<string, number>();
+  const redis = {
+    eval: vi.fn(async (_script: string, _keyCount: number, key: string) => {
+      const next = (counters.get(key) ?? 0) + 1;
+      counters.set(key, next);
+      return next;
+    }),
+    del: vi.fn(async (key: string) => (counters.delete(key) ? 1 : 0)),
+  } as unknown as Redis;
 
   const service = new AuthMethodService(
     userService,
     authMethodRepository,
     verificationTokenRepository,
     authSessionService,
+    redis,
   );
 
   beforeEach(() => {
     vi.clearAllMocks();
+    counters.clear();
     vi.mocked(verifyPassword).mockResolvedValue({ valid: true, needsRehash: false });
   });
 
@@ -74,7 +94,11 @@ describe('AuthMethodService.verifyPasswordForStepUp — MFA bypass guard (sec-A1
     } as never);
 
     await expect(
-      service.verifyPasswordForStepUp({ userPublicId: 'user_pub', password: 'correct-password' }),
+      service.verifyPasswordForStepUp({
+        userPublicId: 'user_pub',
+        sessionPublicId: 'sess_pub',
+        password: 'correct-password',
+      }),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     // `verifyPassword` should not even be invoked — the MFA-required check fires first to
@@ -94,7 +118,11 @@ describe('AuthMethodService.verifyPasswordForStepUp — MFA bypass guard (sec-A1
     } as never);
 
     await expect(
-      service.verifyPasswordForStepUp({ userPublicId: 'user_pub', password: 'correct-password' }),
+      service.verifyPasswordForStepUp({
+        userPublicId: 'user_pub',
+        sessionPublicId: 'sess_pub',
+        password: 'correct-password',
+      }),
     ).resolves.toBeUndefined();
 
     expect(verifyPassword).toHaveBeenCalledWith({
@@ -116,7 +144,116 @@ describe('AuthMethodService.verifyPasswordForStepUp — MFA bypass guard (sec-A1
     vi.mocked(verifyPassword).mockResolvedValue({ valid: false, needsRehash: false });
 
     await expect(
-      service.verifyPasswordForStepUp({ userPublicId: 'user_pub', password: 'wrong' }),
+      service.verifyPasswordForStepUp({
+        userPublicId: 'user_pub',
+        sessionPublicId: 'sess_pub',
+        password: 'wrong',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+});
+
+/**
+ * A-3: a password step-up is an online password oracle for anyone holding a session. Wrong
+ * passwords count toward the login lockout, one user gets five attempts per fifteen minutes, and
+ * the session that spends the budget is revoked.
+ */
+describe('AuthMethodService.verifyPasswordForStepUp — attempt budget (A-3)', () => {
+  const userService = {
+    requireUserRecordByPublicId: vi.fn(),
+    registerFailedLoginAttempt: vi.fn(),
+  } as unknown as UserService;
+  const authSessionService = { revoke: vi.fn() } as unknown as AuthSessionService;
+  const counters = new Map<string, number>();
+  const ttls = new Map<string, number>();
+  const redis = {
+    eval: vi.fn(async (_script: string, _keyCount: number, key: string, ttl: string) => {
+      const next = (counters.get(key) ?? 0) + 1;
+      counters.set(key, next);
+      if (next === 1) ttls.set(key, Number(ttl));
+      return next;
+    }),
+    del: vi.fn(async (key: string) => (counters.delete(key) ? 1 : 0)),
+  } as unknown as Redis;
+  const service = new AuthMethodService(
+    userService,
+    {} as AuthMethodRepository,
+    {} as VerificationTokenRepository,
+    authSessionService,
+    redis,
+  );
+  const stepUp = (password: string) =>
+    service.verifyPasswordForStepUp({
+      userPublicId: 'user_pub',
+      sessionPublicId: 'sess_pub',
+      password,
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    counters.clear();
+    ttls.clear();
+    vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue({
+      id: 1,
+      public_id: 'user_pub',
+      email: 'nomfa@example.com',
+      status: 'ACTIVE',
+      password_hash: 'hashed',
+      is_mfa_enabled: false,
+      is_email_verified: true,
+    } as never);
+    vi.mocked(verifyPassword).mockResolvedValue({ valid: false, needsRehash: false });
+  });
+
+  it('counts a wrong step-up password toward the login lockout', async () => {
+    await expect(stepUp('wrong')).rejects.toMatchObject({
+      messageKey: 'errors:currentPasswordIncorrect',
+    });
+    expect(userService.registerFailedLoginAttempt).toHaveBeenCalledWith({
+      public_id: 'user_pub',
+      options: { maxAttempts: MAX_FAILED_LOGIN_ATTEMPTS, lockoutMinutes: ACCOUNT_LOCKOUT_MINUTES },
+    });
+    expect([...ttls.values()]).toEqual([PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS]);
+    expect(authSessionService.revoke).not.toHaveBeenCalled();
+  });
+
+  it('revokes the session on the wrong password that spends the budget', async () => {
+    for (let attempt = 1; attempt < MAX_PASSWORD_STEP_UP_ATTEMPTS; attempt += 1) {
+      await expect(stepUp('wrong')).rejects.toMatchObject({
+        messageKey: 'errors:currentPasswordIncorrect',
+      });
+    }
+    expect(authSessionService.revoke).not.toHaveBeenCalled();
+
+    await expect(stepUp('wrong')).rejects.toMatchObject({
+      messageKey: 'errors:stepUpAttemptsExhausted',
+    });
+    expect(authSessionService.revoke).toHaveBeenCalledWith({
+      userPublicId: 'user_pub',
+      sessionPublicId: 'sess_pub',
+    });
+    expect(userService.registerFailedLoginAttempt).toHaveBeenCalledTimes(
+      MAX_PASSWORD_STEP_UP_ATTEMPTS,
+    );
+  });
+
+  it('refuses even the correct password once the budget is spent, without comparing it', async () => {
+    counters.set('auth:password_step_up_attempts:user_pub', MAX_PASSWORD_STEP_UP_ATTEMPTS);
+    vi.mocked(verifyPassword).mockResolvedValue({ valid: true, needsRehash: false });
+    vi.mocked(authSessionService.revoke).mockRejectedValueOnce(new NotFoundError('Session'));
+
+    await expect(stepUp('correct-password')).rejects.toMatchObject({
+      messageKey: 'errors:stepUpAttemptsExhausted',
+    });
+    expect(verifyPassword).not.toHaveBeenCalled();
+    expect(authSessionService.revoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('a correct password clears the budget', async () => {
+    await expect(stepUp('wrong')).rejects.toBeInstanceOf(UnauthorizedError);
+    vi.mocked(verifyPassword).mockResolvedValue({ valid: true, needsRehash: false });
+
+    await expect(stepUp('correct-password')).resolves.toBeUndefined();
+    expect(counters.size).toBe(0);
   });
 });

@@ -44,6 +44,11 @@ export const auth_methods = authSchema
       last_used_at: timestamp('last_used_at', { withTimezone: true }),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       revoked_at: timestamp('revoked_at', { withTimezone: true }),
+      // A-1 — migration 20261031151740: a second factor enrolled under an email-code step-up
+      // window counts as a strong step-up factor only from `provisional_until`, and never on the
+      // session that enrolled it. Both NULL for a factor that is strong at once.
+      provisional_until: timestamp('provisional_until', { withTimezone: true }),
+      enrolled_on_session_public_id: varchar('enrolled_on_session_public_id', { length: 28 }),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
         { onDelete: 'set null' },

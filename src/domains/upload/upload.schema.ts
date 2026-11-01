@@ -52,6 +52,9 @@ export const uploads = uploadSchema
         () => users.id,
         { onDelete: 'set null' },
       ),
+      // C-2: the record the key was first attached to (NULL until attached, and for older rows).
+      bound_resource: varchar('bound_resource', { length: 40 }),
+      bound_public_id: varchar('bound_public_id', { length: 28 }),
     },
     (table) => [
       // Tombstone purge: only the soft-deleted rows, so live writes never maintain it.
@@ -73,6 +76,13 @@ export const uploads = uploadSchema
         .where(sql`${table.status} = 'PENDING' AND ${table.deleted_at} IS NULL`),
       check('chk_uploads_file_size', sql`${table.file_size} >= 0`),
       check('chk_uploads_status', sql`${table.status} IN ('PENDING', 'UPLOADED', 'FAILED')`),
+      check(
+        'chk_uploads_bound_pair',
+        sql`(${table.bound_resource} IS NULL) = (${table.bound_public_id} IS NULL)`,
+      ),
+      index('idx_uploads_bound_record')
+        .on(table.bound_resource, table.bound_public_id)
+        .where(sql`${table.bound_resource} IS NOT NULL`),
       pgPolicy('uploads_tenant_isolation', {
         as: 'permissive',
         for: 'all',

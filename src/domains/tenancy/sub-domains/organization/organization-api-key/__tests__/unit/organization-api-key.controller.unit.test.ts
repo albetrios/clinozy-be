@@ -107,6 +107,8 @@ describe('createOrganizationApiKeyController', () => {
       api_key_public_id: apiKeyPublicId,
       body: {},
       updated_by_user_public_id: undefined,
+      // The key's scopes stand in for held permissions in the key-creator role ordering (B2-11).
+      options: { callerApiKeyScopes: ['api-key:manage'] },
     });
   });
 });

@@ -1,19 +1,8 @@
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 import { BaseRecordController } from '@/domains/app/base-record.controller.js';
+import { PATIENT_MEDICAL_DETAIL_READERS } from './patients.constants.js';
 import type { PatientsService } from './patients.service.js';
 import type { PatientOutput } from './patients.types.js';
-
-/**
- * Who sees a patient's medical details — the clinical team (`patient:clinical_record:read`: Doctor,
- * Therapist, Counsellor, Owner, Admin), whoever records them at intake (`patient:update`: the Front
- * desk) and whoever dispenses (`patient_prescription:read`: the Pharmacist). Any one is enough; the
- * Accountant and Marketing (`patient:read` only) see the name and the contact (launch D83 (3)).
- */
-const PATIENT_MEDICAL_DETAIL_READERS = [
-  APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
-  APP_PERMISSIONS.PATIENT_UPDATE,
-  APP_PERMISSIONS.PATIENT_PRESCRIPTION_READ,
-] as const;
 
 /**
  * HTTP handlers for the `patients` routes — {@link BaseRecordController} on {@link PatientsService}:
@@ -35,6 +24,9 @@ export class PatientsController extends BaseRecordController<PatientOutput> {
         contraindications: PATIENT_MEDICAL_DETAIL_READERS,
         notes: PATIENT_MEDICAL_DETAIL_READERS,
       },
+      // B1-3: a download with the medical cells needs a strong step-up; G2-3: reads are audited
+      exportStepUpFields: ['allergies', 'contraindications', 'notes'],
+      auditReads: true,
     });
   }
 }

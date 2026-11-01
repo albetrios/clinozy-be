@@ -162,7 +162,7 @@ one-line PR there (owner: **be-dependency-security**); never a version in the wo
 
 ### Supporting ignore files
 
-- `.gitleaks.toml` -- gitleaks' built-in rules (`[extend] useDefault = true`; without it no rule loads and every scan passes) plus the paths it skips (node_modules, .env.example, lock files, generated docs). The PR CI secrets job plants a key and fails if the config misses it
+- `.gitleaks.toml` -- gitleaks' built-in rules (`[extend] useDefault = true`; without it no rule loads and every scan passes) plus the paths it skips (node_modules, dist, build, coverage, .env.example, lock files, generated docs), each entry anchored to whole path segments (`(^|/)…/` or `…$`: an unanchored `\.git` once skipped every `.github/` file). The PR CI secrets job plants a key in `canary.ts`, `.github/workflows/` (both found) and `node_modules/` (skipped) and fails unless exactly the first two are found
 - A fixture that looks like a secret: mark its line `// gitleaks:allow` (on the first line of a multi-line match). `.gitleaksignore` lists only fingerprints of old commits; never add a new finding there
 - `.semgrepignore` -- paths Semgrep skips (node_modules, dist, migrations, lock files, design drops' `iterations/*/intake-files/`)
 

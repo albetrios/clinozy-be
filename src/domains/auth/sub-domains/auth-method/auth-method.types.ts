@@ -7,6 +7,10 @@ export interface AuthMethodCreateData {
   encrypted_secret?: string;
   is_primary?: boolean;
   created_by_user_id?: number;
+  /** A-1: a provisional second factor counts as a strong step-up factor only from this time. */
+  provisional_until?: Date;
+  /** A-1: the session that enrolled a provisional second factor — never strong on it. */
+  enrolled_on_session_public_id?: string;
 }
 
 /**

@@ -4,6 +4,7 @@ import { getRequestDatabase } from '@/infrastructure/database/contexts/database-
 import {
   BaseRecordRepository,
   type BaseRecordLinkTable,
+  inVisibleBranches,
   nullsLastSortKeys,
 } from '@/domains/app/base-record.repository.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -204,6 +205,7 @@ export class LeadsRepository extends BaseRecordRepository {
   async findOpenLeadsOfContacts(
     contactPublicIds: readonly string[],
     organizationId: number,
+    branchIds: readonly number[] | null = null,
   ): Promise<Map<string, { id: string; status: string; owner_membership_id: string | null }>> {
     if (contactPublicIds.length === 0) return new Map();
     const rows = await getRequestDatabase()
@@ -222,6 +224,7 @@ export class LeadsRepository extends BaseRecordRepository {
           inArray(contacts.public_id, [...contactPublicIds]),
           isNull(leads.deleted_at),
           isOpenStatus,
+          inVisibleBranches({ column: leads.branch_id, branchIds }),
         ),
       );
     return new Map(rows.map(({ contact_public_id, ...lead }) => [contact_public_id, lead]));

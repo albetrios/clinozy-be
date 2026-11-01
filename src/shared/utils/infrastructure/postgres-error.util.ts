@@ -82,6 +82,21 @@ function hasPostgresErrorCode({ error, code }: { error: unknown; code: string })
   return false;
 }
 
+/**
+ * Returns the first SQLSTATE (five characters, e.g. `23503`) on `error` or its `cause` chain, if any.
+ * Socket codes (`ECONNRESET`) are not SQLSTATEs and are skipped.
+ */
+export function getPostgresErrorCode(error: unknown): string | undefined {
+  let current: unknown = error;
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+    if (typeof current !== 'object' || current === null) return undefined;
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return code;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+
 /** Returns true when `error` is a Postgres `unique_violation` (SQLSTATE 23505). */
 export function isPostgresUniqueViolation(error: unknown): boolean {
   return hasPostgresErrorCode({ error, code: POSTGRES_UNIQUE_VIOLATION });

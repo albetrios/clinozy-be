@@ -161,4 +161,70 @@ describe('App record purge — integration (WC-46, D38)', () => {
       `/app/offerings/${billed}/restore`,
     );
   });
+
+  it('G2-4: never erases a clinical or a financial record, whatever the window', async () => {
+    await purgeAfter(1);
+    await flow.expect(200, 'a contact', 'POST', '/app/contacts', {
+      first_name: 'Ira',
+      last_name: `k${S}`,
+      phones: [{ phone: `+918${S.slice(-7)}22`, is_primary: true }],
+    });
+    const contact = flow.last('.data.id');
+    await flow.expect(200, 'her file', 'POST', '/app/patients', {
+      contact_id: contact,
+      home_branch_id: fixture.branches.vesu,
+    });
+    const patient = flow.last('.data.id');
+    await flow.expect(200, 'a clinical note', 'POST', `/app/patients/${patient}/clinical-notes`, {
+      kind: 'finding',
+      text: 'Mild erythema',
+    });
+    const note = flow.last('.data.id');
+    await flow.expect(200, 'an offering', 'POST', '/app/offerings', {
+      name: `Kept ${S}`,
+      price: 200,
+    });
+    await flow.expect(200, 'a bill', 'POST', '/app/invoices', {
+      branch_id: fixture.branches.vesu,
+      contact_id: contact,
+      items: [{ offering_id: flow.last('.data.id'), quantity: 1 }],
+    });
+    const bill = flow.last('.data.id');
+
+    flow.as('doctor');
+    await flow.expect(
+      403,
+      'a doctor may not delete a clinical note (patient:delete, B1-2)',
+      'DELETE',
+      `/app/patients/${patient}/clinical-notes/${note}?reason=mistake`,
+    );
+    flow.as('owner');
+    await flow.expect(
+      204,
+      'the owner deletes the note',
+      'DELETE',
+      `/app/patients/${patient}/clinical-notes/${note}?reason=mistake`,
+    );
+    await flow.expect(204, 'and the bill', 'DELETE', `/app/invoices/${bill}?reason=mistake`);
+    await operatorQuery`
+      UPDATE app.patient_clinical_notes SET deleted_at = now() - interval '400 days'
+      WHERE public_id = ${note}
+    `;
+    await operatorQuery`
+      UPDATE app.invoices SET deleted_at = now() - interval '400 days' WHERE public_id = ${bill}
+    `;
+
+    await runGlobalRetentionWorkerJob((handle) => runAppRecordPurgeJob(handle));
+    const [kept] = await operatorQuery<{ notes: number; bills: number }[]>`
+      SELECT (SELECT count(*)::int FROM app.patient_clinical_notes WHERE public_id = ${note}) AS notes,
+        (SELECT count(*)::int FROM app.invoices WHERE public_id = ${bill}) AS bills
+    `;
+    expect([kept?.notes, kept?.bills], 'both are kept, deleted').toEqual([1, 1]);
+    await flow.expect(
+      200,
+      'the note is still restorable',
+      'POST',
+      `/app/patients/${patient}/clinical-notes/${note}/restore`,
+    );
+  });
 });

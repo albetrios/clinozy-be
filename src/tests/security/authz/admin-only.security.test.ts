@@ -5,7 +5,7 @@ import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
-import { generateTestToken } from '@/tests/helpers/test-auth.js';
+import { generateTestToken, generateSuperAdminToken } from '@/tests/helpers/test-auth.js';
 
 /**
  * Global-role (BFLA) attack matrix — model `global-role` in
@@ -75,7 +75,7 @@ describe('Security: global-role admin routes reject non-admins (model: global-ro
     // email must be allowlisted AND verified, and the token must carry the admin role.
     const adminUser = await createTestUser({ email: globalAdminEmail, isEmailVerified: true });
     const targetUser = await createTestUser();
-    const token = await generateTestToken({ userId: adminUser.public_id, role: 'super_admin' });
+    const token = await generateSuperAdminToken(adminUser.public_id);
     const response = await injectAuthenticated(app, {
       method: 'GET',
       url: testApiPath(`/users/${targetUser.public_id}`),

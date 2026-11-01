@@ -18,7 +18,7 @@ import { formatEnvValue, upsertEnvAssignment } from '@tooling/dev/env-file.util.
 import { resolveDerivedNames } from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from '@tooling/setup/common/config.js';
 import { requireTool } from '@tooling/setup/common/require-tool.js';
-import { parseCommandLine } from '@tooling/setup/common/script.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 const DERIVED_NAMES = resolveDerivedNames(loadConfig());
 const SONAR_URL = process.env.SONAR_HOST_URL ?? 'http://localhost:9000';
@@ -280,7 +280,8 @@ async function waitForAnalysis(token: string, taskId: string): Promise<void> {
   die('timed out waiting for SonarQube to process the analysis.');
 }
 
-interface SonarIssue {
+/** An issue as `/api/issues/search` returns it: the fields the report prints. */
+export interface SonarIssue {
   rule: string;
   severity: string;
   component: string;
@@ -303,38 +304,108 @@ async function fetchOpenIssues(token: string): Promise<SonarIssue[]> {
   return issues;
 }
 
-async function fetchOpenHotspots(token: string): Promise<number> {
-  const response = await sonarApi(
-    `/api/hotspots/search?projectKey=${PROJECT_KEY}&status=TO_REVIEW&ps=1`,
-    { basicAuth: `${token}:` },
-  );
-  if (!response.ok) return 0;
-  return ((await response.json()) as { paging?: { total?: number } }).paging?.total ?? 0;
+/** A security hotspot as `/api/hotspots/search` returns it: the fields the report prints. */
+export interface SonarHotspot {
+  ruleKey: string;
+  component: string;
+  line?: number;
+  message: string;
+  vulnerabilityProbability?: string;
 }
 
-function reportAndExit(issues: SonarIssue[], hotspots: number): never {
-  if (issues.length === 0 && hotspots === 0) {
-    log(
-      `✓ SonarQube clean — 0 issues / 0 hotspots. Dashboard: ${SONAR_URL}/dashboard?id=${PROJECT_KEY}`,
+/** How many issues, and how many hotspots, the report lists; the rest are counted. */
+const LISTED_FINDINGS = 50;
+
+/**
+ * Every open security hotspot, page by page. A non-OK answer stops the gate: it used to count as
+ * zero hotspots, so a SonarQube that could not answer passed the gate.
+ */
+async function fetchOpenHotspots(token: string): Promise<SonarHotspot[]> {
+  const hotspots: SonarHotspot[] = [];
+  for (let page = 1; page <= 20; page += 1) {
+    const response = await sonarApi(
+      `/api/hotspots/search?projectKey=${PROJECT_KEY}&status=TO_REVIEW&ps=100&p=${page}`,
+      { basicAuth: `${token}:` },
     );
+    if (!response.ok) die(`failed to query SonarQube hotspots (HTTP ${response.status}).`);
+    const parsed = (await response.json()) as {
+      paging?: { total?: number };
+      hotspots?: SonarHotspot[];
+    };
+    const pageHotspots = parsed.hotspots ?? [];
+    hotspots.push(...pageHotspots);
+    if (hotspots.length >= (parsed.paging?.total ?? 0) || pageHotspots.length === 0) break;
+  }
+  return hotspots;
+}
+
+/** A finding's file, without the `<project>:` prefix SonarQube puts on its component. */
+function fileOf(component: string): string {
+  return component.includes(':') ? component.split(':').slice(1).join(':') : component;
+}
+
+/** `file:line`, or the file alone when SonarQube gives no line. */
+function locationOf(finding: { component: string; line?: number }): string {
+  const file = fileOf(finding.component);
+  return finding.line ? `${file}:${finding.line}` : file;
+}
+
+/**
+ * The gate's failure report: each issue and each security hotspot with its rule, file and line.
+ *
+ * @remarks
+ * - **Why:** the report printed only the hotspot count, so a push stopped on "1 security
+ *   hotspot(s) to review" with nothing to say which one.
+ * - **Algorithm:** a header with both counts, up to {@link LISTED_FINDINGS} issues (severity,
+ *   rule, location, message), then up to as many hotspots (probability, rule, location, message),
+ *   each overflow counted, then the dashboard link.
+ * - **Failure modes:** none — a pure string builder.
+ * - **Side effects:** none; built from SonarQube's findings only, never the token.
+ */
+export function formatFindings({
+  issues,
+  hotspots,
+  dashboard,
+}: {
+  issues: SonarIssue[];
+  hotspots: SonarHotspot[];
+  dashboard: string;
+}): string {
+  const lines = [
+    `\n[sonar-gate] ✗ SonarQube found ${issues.length} issue(s)` +
+      `${hotspots.length > 0 ? ` and ${hotspots.length} security hotspot(s) to review` : ''} — fix them before pushing.\n`,
+  ];
+  for (const issue of issues.slice(0, LISTED_FINDINGS)) {
+    lines.push(
+      `  ${issue.severity.padEnd(8)} ${issue.rule.padEnd(22)} ${locationOf(issue)}`,
+      `      ${issue.message}`,
+    );
+  }
+  if (issues.length > LISTED_FINDINGS) {
+    lines.push(`  … and ${issues.length - LISTED_FINDINGS} more issue(s).`);
+  }
+  if (hotspots.length > 0) lines.push('', '  Security hotspots to review:');
+  for (const hotspot of hotspots.slice(0, LISTED_FINDINGS)) {
+    const probability = (hotspot.vulnerabilityProbability ?? 'HOTSPOT').padEnd(8);
+    lines.push(
+      `  ${probability} ${hotspot.ruleKey.padEnd(22)} ${locationOf(hotspot)}`,
+      `      ${hotspot.message}`,
+    );
+  }
+  if (hotspots.length > LISTED_FINDINGS) {
+    lines.push(`  … and ${hotspots.length - LISTED_FINDINGS} more hotspot(s).`);
+  }
+  lines.push('', `  Full report: ${dashboard}`, '');
+  return lines.join('\n');
+}
+
+function reportAndExit(issues: SonarIssue[], hotspots: SonarHotspot[]): never {
+  const dashboard = `${SONAR_URL}/dashboard?id=${PROJECT_KEY}`;
+  if (issues.length === 0 && hotspots.length === 0) {
+    log(`✓ SonarQube clean — 0 issues / 0 hotspots. Dashboard: ${dashboard}`);
     process.exit(0);
   }
-
-  process.stderr.write(
-    `\n[sonar-gate] ✗ SonarQube found ${issues.length} issue(s)` +
-      `${hotspots > 0 ? ` and ${hotspots} security hotspot(s) to review` : ''} — fix them before committing.\n\n`,
-  );
-  for (const issue of issues.slice(0, 50)) {
-    const file = issue.component.includes(':')
-      ? issue.component.split(':').slice(1).join(':')
-      : issue.component;
-    const where = issue.line ? `${file}:${issue.line}` : file;
-    process.stderr.write(
-      `  ${issue.severity.padEnd(8)} ${issue.rule.padEnd(22)} ${where}\n      ${issue.message}\n`,
-    );
-  }
-  if (issues.length > 50) process.stderr.write(`  … and ${issues.length - 50} more.\n`);
-  process.stderr.write(`\n  Full report: ${SONAR_URL}/dashboard?id=${PROJECT_KEY}\n`);
+  process.stderr.write(formatFindings({ issues, hotspots, dashboard }));
   process.exit(1);
 }
 
@@ -348,6 +419,8 @@ async function main(): Promise<void> {
   reportAndExit(issues, hotspots);
 }
 
-main().catch((error: unknown) => {
-  die(error instanceof Error ? error.message : String(error));
-});
+if (isMain(import.meta.url)) {
+  main().catch((error: unknown) => {
+    die(error instanceof Error ? error.message : String(error));
+  });
+}

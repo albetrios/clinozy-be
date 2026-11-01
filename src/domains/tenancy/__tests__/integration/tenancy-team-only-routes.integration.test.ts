@@ -148,7 +148,13 @@ describe('Tenancy team-only route guards — Integration', () => {
 
     it('transfers a TEAM organization to an active member with 200', async () => {
       const team = await createOwnedOrganization('TEAM');
-      const recipient = await addSecondMember(team.organization.id, team.role.id);
+      // A role of their own: the former owner moves to it as the new owner takes the owner's role
+      // (B2-1) — this hand-built organization has no Admin role to move them to.
+      const recipientRole = await createRoleWithPermissions({
+        organizationId: team.organization.id,
+        permissionCodes: [TENANCY_PERMISSIONS.ORGANIZATION_READ],
+      });
+      const recipient = await addSecondMember(team.organization.id, recipientRole.id);
 
       const response = await injectAuthenticated(app, {
         method: 'POST',

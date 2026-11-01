@@ -20,7 +20,9 @@ write it (`role_ids`, main first).
 
 ## Key invariants
 
-- **Tenant isolation:** ENABLE + FORCE RLS on the organization GUC.
+- **Tenant isolation:** ENABLE + FORCE RLS on the organization GUC; the membership and the role are
+  composite keys `(organization_id, <column>)` → `(organization_id, id)`, so a row cannot pair a member
+  with another organization's role (B2-5).
 - **Union of roles:** the permission resolution, the "who holds permission X" lookup, the role
   member counts and the role delete guard all read the main role **and** these rows.
 - **Never the main role:** the service refuses a list with a role twice, so a role appears once

@@ -138,7 +138,7 @@ export function patientPrescriptionsRoutes(
         schema: {
           summary: 'Delete a draft prescription',
           description:
-            "Deletes a draft with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. An approved prescription is final — a 409 `prescription_approved` (P15). Restorable until the organization's purge window ends (D38). Requires patient_prescription:delete.",
+            'Deletes a draft with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. An approved prescription is final — a 409 `prescription_approved` (P15). Restorable at any time — a clinical record is never purged (G2-4). Requires patient_prescription:delete.',
           tags: ['Patient file'],
           params: patientPrescriptionsIdParamsDto,
           querystring: recordDeleteQuerySchema,

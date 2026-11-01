@@ -1,6 +1,6 @@
 /**
- * i18n middleware: initializes i18next with fs-backend and language detection,
- * adds a preHandler so every request gets request.t(), request.language, request.i18n.
+ * i18n middleware: initializes i18next with the fs backend and gives every request one supported
+ * language — `request.language`, a `request.t()` bound to it, and a `Content-Language` header.
  * English is the default and fallback locale.
  */
 import { existsSync } from 'node:fs';
@@ -8,7 +8,6 @@ import { join } from 'node:path';
 import fp from 'fastify-plugin';
 import Backend from 'i18next-fs-backend';
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
-import { handle as i18nextHandle, LanguageDetector } from 'i18next-http-middleware';
 import i18next from 'i18next';
 import type { InitOptions } from 'i18next';
 import { env } from '@/shared/config/env.config.js';
@@ -25,8 +24,6 @@ const LOCALES_DIR = join(process.cwd(), 'src', 'shared', 'locales');
 const LOCALES_LOAD_PATH = join(LOCALES_DIR, '{{lng}}', '{{ns}}.json');
 
 const REQUIRED_NAMESPACES = ['common', 'errors', 'success', 'mail'] as const;
-
-const I18N_IGNORE_ROUTES = ['/livez', '/readyz', '/api/v1/mcp'];
 
 /**
  * Resolves the effective locale for a request: prefers the first 2-letter
@@ -46,48 +43,35 @@ export function resolveRequestLanguageFromHeader({
   return toSupportedLanguage(String(acceptLanguageHeader).split(',')[0]?.trim().slice(0, 2));
 }
 
-type I18nRequest = {
-  language?: string;
-  t?: (key: string, opts?: object) => string;
-};
-
-function applyResolvedLanguage({
-  request,
-  req,
-  language,
-}: {
-  request: FastifyRequest;
-  req: I18nRequest;
-  language: SupportedLanguage;
-}): void {
-  req.language = language;
-  (request as { language?: string }).language = language;
-  const requestWithTranslation = request as I18nRequest;
-  requestWithTranslation.t =
-    req.t ??
-    ((key: string, opts?: object) =>
-      i18next.t(key, { lng: requestWithTranslation.language ?? DEFAULT_LANGUAGE, ...opts }));
-}
-
 /**
- * Decorates the Fastify `request` with `language` and `t()` helpers using the
- * locale resolved from `Accept-Language` and the organization default locale.
- * Called from i18n middleware hooks; safe to invoke twice (re-applies language).
+ * Decorates the Fastify `request` with the resolved {@link SupportedLanguage} and a `t()` fixed to it.
+ *
+ * @remarks
+ * - **Algorithm:** {@link resolveRequestLanguageFromHeader} picks the language (`Accept-Language`,
+ *   then the organization default, then {@link DEFAULT_LANGUAGE}); `request.t` is
+ *   `i18next.getFixedT(language)` — a bound translator over the one shared instance.
+ * - **Failure modes:** none — an unknown language maps to {@link DEFAULT_LANGUAGE}.
+ * - **Side effects:** sets `request.language` and `request.t`; safe to call twice (the auth
+ *   middleware calls it again with the organization default locale).
+ * - **Notes:** D-1 — the request never names a language i18next loads. The previous
+ *   `i18next-http-middleware` handler accepted any `?lng=`, `i18next` cookie or `Accept-Language`
+ *   value, cloned the instance per request and called `loadLanguages` with it, which appended each
+ *   new code to `i18next.options.preload` for good and reloaded the whole list: a stream of
+ *   anonymous requests with random codes grew that list without bound and blocked the event loop.
  */
 export function attachRequestI18nHelpers({
   request,
-  req,
   organizationDefaultLocale,
 }: {
   request: FastifyRequest;
-  req: I18nRequest;
   organizationDefaultLocale?: SupportedLanguage | null | undefined;
 }): void {
   const language = resolveRequestLanguageFromHeader({
     acceptLanguageHeader: request.headers['accept-language'],
     organizationDefaultLocale,
   });
-  applyResolvedLanguage({ request, req, language });
+  request.language = language;
+  request.t = i18next.getFixedT(language);
 }
 
 /**
@@ -111,10 +95,19 @@ export function verifyLocalesAvailable(): void {
   }
 }
 
-/** i18next's init options — one set for the API and the worker. */
+/**
+ * i18next's init options — one set for the API and the worker.
+ *
+ * @remarks
+ * `supportedLngs` + `nonExplicitSupportedLngs` + `load: 'languageOnly'` keep i18next itself on
+ * {@link SUPPORTED_LANGUAGES}: a code outside the list is never loaded, whatever path asks for it.
+ */
 function buildI18nInitOptions(): InitOptions {
   return {
     preload: [...SUPPORTED_LANGUAGES],
+    supportedLngs: [...SUPPORTED_LANGUAGES],
+    nonExplicitSupportedLngs: true,
+    load: 'languageOnly',
     ns: [...REQUIRED_NAMESPACES],
     defaultNS: 'common',
     fallbackLng: [DEFAULT_LANGUAGE],
@@ -149,21 +142,18 @@ export async function initializeI18nextForBackgroundWork(): Promise<void> {
 
 const i18nMiddleware: FastifyPluginAsync = async (app) => {
   verifyLocalesAvailable();
-  await i18next.use(Backend).use(LanguageDetector).init(buildI18nInitOptions());
+  await i18next.use(Backend).init(buildI18nInitOptions());
 
-  const handler = i18nextHandle(i18next, { ignoreRoutes: I18N_IGNORE_ROUTES });
-  // Use onRequest so request.t is set for every request (including 404 not-found).
-  app.addHook('onRequest', (request, reply, done) => {
-    const req = request as unknown as Parameters<typeof handler>[0] & {
-      language?: string;
-      t?: (key: string, opts?: object) => string;
-    };
-    const res = reply;
-    handler(req, res, (err?: Error) => {
-      if (err) return done(err);
-      attachRequestI18nHelpers({ request, req });
-      done();
-    });
+  // onRequest so request.t is set for every request (including the 404 not-found handler).
+  app.addHook('onRequest', async (request) => {
+    attachRequestI18nHelpers({ request });
+  });
+
+  // onSend, not onRequest: the auth middleware may switch the language to the organization
+  // default after this hook ran, and the header must name the language the body is in.
+  app.addHook('onSend', async (request, reply, payload) => {
+    if (request.language) reply.header('content-language', request.language);
+    return payload;
   });
 
   // Organization default-locale application moved to the auth middleware

@@ -1,5 +1,5 @@
 import { requireConfirmedUploads } from '@/domains/app/base-record.service.js';
-import type { BaseRecordRules } from '@/domains/app/base-record.types.js';
+import { type BaseRecordRules, UPLOAD_RECORD_RESOURCE } from '@/domains/app/base-record.types.js';
 import { patientFileValueLabel } from '@/domains/app/sub-domains/patients/patients.constants.js';
 import { writePatientFileActivity } from '@/domains/app/sub-domains/patients/patients.rules.js';
 
@@ -31,9 +31,16 @@ export const patientReportsRules: BaseRecordRules = {
   },
   // D86: each file's name and a link that shows it — one upload read per page
   decorate: async (outputs, context) => {
+    // C-2: a file is signed only for the report it is bound to
     const links = await context.ports.fileReadUrls({
       organizationId: context.organizationId,
-      fileKeys: outputs.flatMap((output) => output.file_keys as string[]),
+      bindings: outputs.flatMap((output) =>
+        (output.file_keys as string[]).map((fileKey) => ({
+          fileKey,
+          resource: UPLOAD_RECORD_RESOURCE.PATIENT_REPORT,
+          publicId: String(output.id),
+        })),
+      ),
     });
     for (const output of outputs) {
       output.files = (output.file_keys as string[]).map((file_key) => {

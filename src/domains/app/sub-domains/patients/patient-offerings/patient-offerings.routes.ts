@@ -66,7 +66,7 @@ export function patientOfferingsRoutes(service: PatientOfferingsService): Fastif
         schema: {
           summary: 'Change a bought offering',
           description:
-            "Changes a bought offering's `valid_until` (a date — never before its invoice's, a 400 — or null for no expiry) or `sessions_total` (1–999, never below `sessions_used` — a 400; a refund of unused sessions lowers it to what was spent, PK6). Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` (D43). Requires payment:update.",
+            "Changes a bought offering's `valid_until` (a date — never before its invoice's, a 400 — or null for no expiry) or `sessions_total` (1–999, never below `sessions_used` — a 400; a refund of unused sessions lowers it to what was spent, PK6; raising it gives unpaid sessions and needs offering:update too — a 403 `field_permission_required` otherwise, B1-4). Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` (D43). Requires payment:update.",
           tags: ['Patient file'],
           params: patientOfferingsIdParamsDto,
           body: UpdatePatientOfferingDto,

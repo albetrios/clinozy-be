@@ -13,6 +13,18 @@ const RATE_LIMIT_INCR_SCRIPT = `
   local ttl = redis.call('PTTL', KEYS[1])
   return {current, ttl >= 0 and ttl or tonumber(ARGV[1])}
 `;
+/**
+ * Lua script that reads a rate-limit counter and its remaining TTL without changing either —
+ * the non-mutating twin of {@link RATE_LIMIT_INCR_SCRIPT}. A missing key is `{0, 0}`.
+ */
+const RATE_LIMIT_READ_SCRIPT = `
+  local current = redis.call('GET', KEYS[1])
+  if not current then
+    return {0, 0}
+  end
+  local ttl = redis.call('PTTL', KEYS[1])
+  return {tonumber(current), ttl >= 0 and ttl or 0}
+`;
 interface RateLimitIncrResult {
   current: number;
   ttl: number;
@@ -51,6 +63,8 @@ function logRedisFailover(error: unknown): void {
  * @remarks
  * - **Algorithm:** `incr` runs an atomic Lua script (`INCR` + conditional `PEXPIRE` + `PTTL`)
  *   in a single Redis round-trip, falling back to a local `Map` counter on any Redis rejection.
+ *   `read` (for `{ increment: false }` — the failed-authentication pre-check) is its
+ *   non-mutating twin (`GET` + `PTTL`), with the same fallback.
  *   `child` returns a new store with a route-scoped key prefix so per-route presets keep isolated
  *   buckets.
  * - **Failure modes:** none surfaced to the caller — Redis errors are caught and converted into
@@ -77,6 +91,35 @@ class RedisFallbackRateLimitStore {
         logRedisFailover(error);
         callback(null, this.incrInMemory({ fullKey, timeWindow }));
       });
+  }
+
+  /**
+   * Non-mutating snapshot of `key` (`@fastify/rate-limit` calls it for `{ increment: false }`):
+   * Redis first, the in-process counter when Redis rejects — never throws, never counts.
+   */
+  read(key: string, callback: RateLimitIncrCallback, _timeWindow: number, _max: number): void {
+    const fullKey = `${this.keyPrefix}${key}`;
+    this.readInRedis(fullKey)
+      .then((result) => callback(null, result))
+      .catch((error) => {
+        logRedisFailover(error);
+        callback(null, this.readInMemory(fullKey));
+      });
+  }
+
+  private async readInRedis(fullKey: string): Promise<RateLimitIncrResult> {
+    const result = (await this.redis.eval(RATE_LIMIT_READ_SCRIPT, 1, fullKey)) as [number, number];
+    const [current, ttl] = result;
+    return { current, ttl };
+  }
+
+  private readInMemory(fullKey: string): RateLimitIncrResult {
+    const now = Date.now();
+    const existing = this.localCounters.get(fullKey);
+    if (!existing || existing.expiresAtMs <= now) {
+      return { current: 0, ttl: 0 };
+    }
+    return { current: existing.count, ttl: existing.expiresAtMs - now };
   }
 
   private async incrInRedis({

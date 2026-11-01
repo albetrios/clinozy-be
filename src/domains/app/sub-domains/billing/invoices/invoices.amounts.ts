@@ -1,4 +1,19 @@
+import { UnprocessableEntityError } from '@/shared/errors/index.js';
 import { paiseOf } from '@/shared/utils/validation/record-fields.util.js';
+
+/** The largest amount a `numeric(12,2)` money column holds, in paise (₹9,999,999,999.99). */
+const MONEY_COLUMN_MAX_PAISE = 999_999_999_999;
+
+/**
+ * C-1: every amount a bill writes fits its `numeric(12,2)` column — a line's gross and amount, the
+ * subtotal and the total; one that would not is a 422 `amount_too_large`, never a database error.
+ */
+function assertAmountsFit(paise: readonly number[]): void {
+  if (paise.every((value) => value <= MONEY_COLUMN_MAX_PAISE)) return;
+  throw new UnprocessableEntityError('errors:invoiceAmountTooLarge', {
+    max: '9,999,999,999.99',
+  }).withReason('amount_too_large');
+}
 /** What a line contributes to the amounts (rupees; the rate is per unit). */
 export interface InvoiceLinePricing {
   quantity: number;
@@ -86,8 +101,9 @@ function spillShareExcess(options: {
  * @remarks
  * - **Algorithm:** whole paise throughout, each line rounded to the paisa; the totals are the
  *   lines' sums, so `total = taxable_total + gst_total` holds exactly.
- * - **Failure modes:** none — the caller refuses an overall discount above `afterLineDiscounts`
- *   (400 `overall_discount`) before writing.
+ * - **Failure modes:** `UnprocessableEntityError` (422 `amount_too_large`) when a line's gross or
+ *   amount, the subtotal or the total would not fit a `numeric(12,2)` column (C-1); the caller
+ *   refuses an overall discount above `afterLineDiscounts` (400 `overall_discount`) before writing.
  */
 export function computeInvoiceAmounts(options: {
   lines: readonly InvoiceLinePricing[];
@@ -122,6 +138,12 @@ export function computeInvoiceAmounts(options: {
       amount: toRupees(taxable + gst),
     };
   });
+  assertAmountsFit([
+    ...gross,
+    sum(gross),
+    ...lines.map((line) => paiseOf(line.amount)),
+    sum(lines.map((line) => paiseOf(line.amount))),
+  ]);
   const totalOf = (pick: (line: InvoiceLineAmounts) => number) =>
     toRupees(sum(lines.map((line) => paiseOf(pick(line)))));
   return {

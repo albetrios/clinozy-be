@@ -169,6 +169,7 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
       request: {
         method: 'POST',
         routePath: testApiPath('/billing/subscriptions/:subscription_id/change-plan'),
+        pathParameters: { subscription_id: subscription.public_id },
         body: { plan_id: newPlan.public_id },
       },
     });
@@ -194,6 +195,7 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
       request: {
         method: 'POST',
         routePath: testApiPath('/billing/subscriptions/:subscription_id/cancel'),
+        pathParameters: { subscription_id: subscription.public_id },
         body: undefined,
       },
     });
@@ -218,6 +220,7 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
       request: {
         method: 'POST',
         routePath: testApiPath('/billing/subscriptions/:subscription_id/resume'),
+        pathParameters: { subscription_id: subscription.public_id },
         body: undefined,
       },
     });

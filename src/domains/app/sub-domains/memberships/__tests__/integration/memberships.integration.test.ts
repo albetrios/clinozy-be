@@ -73,6 +73,28 @@ describe('App memberships — integration (routes-final §2)', () => {
         .sort()
         .join(','),
     );
+    // E-4: the probing filters take membership:read — `holds` is open only for a code you hold.
+    await flow.expect(
+      403,
+      'the front desk cannot find who holds a code it lacks (E-4)',
+      'GET',
+      '/app/memberships?holds=payment:delete&limit=100',
+    );
+    flow.expectValue('a missing permission', REASON, 'missing_permission');
+    await flow.expect(
+      403,
+      'nor search the team by email without membership:read (E-4)',
+      'GET',
+      `/app/memberships?q=${encodeURIComponent('@')}`,
+    );
+    flow.expectValue('a missing permission', REASON, 'missing_permission');
+    flow.as('admin');
+    await flow.expect(
+      200,
+      'a membership reader searches by name or email',
+      'GET',
+      `/app/memberships?q=${encodeURIComponent('@')}&limit=100`,
+    );
     await flow.expect(
       200,
       'who reverses a payment',

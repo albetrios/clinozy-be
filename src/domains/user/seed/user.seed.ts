@@ -101,3 +101,16 @@ export async function seedDemoUser({
     onboarding_completed_at: new Date(),
   });
 }
+
+/**
+ * Marks a seeded user as MFA-enrolled (`users.is_mfa_enabled = true`), the flag a real TOTP
+ * enrollment flips with its factor — so a password sign-in answers `mfa_required` and, for an
+ * email on `GLOBAL_ADMIN_EMAILS`, sign-in may grant `super_admin` (A-2). Pair it with the auth
+ * domain's `seedTotpFactor`.
+ */
+export async function markSeededUserMfaEnabled(userId: number): Promise<void> {
+  await getRequestDatabase()
+    .update(users)
+    .set({ is_mfa_enabled: true })
+    .where(and(eq(users.id, userId), isNull(users.deleted_at)));
+}

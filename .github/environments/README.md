@@ -16,7 +16,27 @@ branch. `NODE_ENV` is set by the deploy from that environment, not stored in the
 | Config file | GitHub Environment | Protection |
 | ----------- | ------------------ | ---------- |
 | [production.json](production.json) | `production` | Required reviewers (enforced on a private repo only with GitHub Enterprise — otherwise `github:sync` skips them with a notice), deployment branches |
-| [development.json](development.json) | `development` | None (extend when needed) |
+| [development.json](development.json) | `development` | Deployment branches: the `main` branch only (`protectedBranches`, H-4) |
+
+**`development` allows the `main` branch only** (`deploymentBranchPolicy.protectedBranches`,
+H-4): it holds the development deploy's secrets and the release PAT (`RELEASE_PLEASE_TOKEN`), so no
+job a pull request or a pushed branch starts may select it. A job that must react to a pull request
+and needs one of those secrets is split: the pull-request half holds nothing, and a `workflow_run`
+half (which runs main's copy of its file, on `main`) reads the secret and runs no code from the PR —
+`dependabot-approval.yml` → `dependabot-auto-merge.yml` (H-3). As on production, the policy does
+not stop the `release: published` run (its ref is the tag), which probes the development API.
+Pinned by `src/tests/unit/ci/dependabot-auto-merge.policy.unit.test.ts`.
+
+**What `pnpm github:sync` cannot express yet** (set by hand, or not at all):
+
+- **`preventSelfReview` stays `false`** on production while it has one reviewer: with it on, the
+  only reviewer cannot approve their own deploy (a deadlock `pnpm github:tool:governance-mode`
+  refuses). Flip it with `pnpm github:tool:governance-mode team` once there are two owners.
+- **The release PAT in an environment of its own** (only the release-please job, the PAT canary
+  and the Dependabot merge selecting it): `sync-config.ts` requires every GitHub Environment to
+  be a `NODE_ENV` value (`development` / `production`), so a non-deploy environment fails its
+  consistency check. Until then, or until releases move to a GitHub App, the main-only branch
+  policy is what keeps the PAT from a PR.
 
 **API docs uploads** (Postman workspace, Scalar Registry) use the same GitHub Environment on push: `dev` → `development`, `main` → `production`. Set `POSTMAN_API_KEY`, `POSTMAN_WORKSPACE_ID`, `SCALAR_API_KEY`, `SCALAR_NAMESPACE`, and optional `SCALAR_SLUG` per environment (e.g. `clinozy-be-dev` vs `clinozy-be`) so hosted docs do not overwrite each other.
 

@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { resolveUserOrganizationPermissions } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import { organizationRequiresMfa } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-mfa-policy.js';
-import type { GlobalRole } from '@/shared/constants/roles.constants.js';
+import { GLOBAL_ROLES, type GlobalRole } from '@/shared/constants/roles.constants.js';
 import {
   ForbiddenError,
   MISSING_PERMISSION_REASON,
@@ -139,6 +139,10 @@ export async function hasOrganizationPermission({
  * Returns a Fastify preHandler that checks the authenticated user's global role.
  * Throws ForbiddenError if the user's role is not in the allowed list.
  *
+ * A-2: a `super_admin` is admitted only on a session that proved a second factor
+ * (`request.auth.mfaVerified`, the `amr: ['mfa']` claim); otherwise 403
+ * `errors:superAdminRequiresMfa` with reason `mfa_required`.
+ *
  * Usage:
  *   { preHandler: [app.authenticate, requireRole(GLOBAL_ROLES.SUPER_ADMIN)] }
  */
@@ -161,6 +165,20 @@ export function requireRole(
         }),
       });
       throw new ForbiddenError('errors:insufficientRolePrivileges');
+    }
+    if (auth.role === GLOBAL_ROLES.SUPER_ADMIN && !auth.mfaVerified) {
+      await emitPermissionDenyAudit({
+        request,
+        metadata: buildDenyMetadata({
+          request,
+          extra: {
+            deny_reason: 'super_admin_requires_mfa',
+            required_roles: allowedRoles,
+            actor_role: auth.role,
+          },
+        }),
+      });
+      throw new ForbiddenError('errors:superAdminRequiresMfa').withReason('mfa_required');
     }
   };
 }

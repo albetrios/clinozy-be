@@ -307,6 +307,25 @@ export function nullsLastSortKeys(options: {
   ];
 }
 
+/**
+ * `column` within the caller's branches (D9) — no condition for `null` (every branch); a nullable
+ * column also keeps its rows of no branch. Shared by the lists and the reads of another table's
+ * records a page shows (a contact's open lead and visits, B1-5).
+ */
+export function inVisibleBranches({
+  column,
+  branchIds,
+}: {
+  column: AnyPgColumn;
+  branchIds: readonly number[] | null;
+}): SQL | undefined {
+  if (branchIds === null) return undefined;
+  const ids = [...branchIds];
+  // A NOT NULL branch column: a plain IN, so each branch is one index range (H4).
+  if (column.notNull) return ids.length === 0 ? sql`false` : inArray(column, ids);
+  return ids.length === 0 ? isNull(column) : (or(inArray(column, ids), isNull(column)) as SQL);
+}
+
 /** A named column of `table` (throws on a typo — the generator names them). */
 export function columnOf(table: PgTable, name: string): AnyPgColumn {
   const column = (getTableColumns(table) as Record<string, AnyPgColumn>)[name];
@@ -754,11 +773,10 @@ export class BaseRecordRepository {
 
   /** Rows of the scope's branches — or of no branch, on a nullable branch column (D9). */
   private branchCondition(branchScope: { column: string; ids: readonly number[] }): SQL {
-    const column = this.column(branchScope.column);
-    const ids = [...branchScope.ids];
-    // A NOT NULL branch column: a plain IN, so each branch is one index range (H4).
-    if (column.notNull) return ids.length === 0 ? sql`false` : inArray(column, ids);
-    return ids.length === 0 ? isNull(column) : (or(inArray(column, ids), isNull(column)) as SQL);
+    return inVisibleBranches({
+      column: this.column(branchScope.column),
+      branchIds: branchScope.ids,
+    }) as SQL;
   }
 
   /** The conditions of the table's own derived filters ({@link BaseRecordTableConfig.derivedFilters}). */
@@ -1024,24 +1042,33 @@ export class BaseRecordRepository {
       .groupBy(...options.columns.map((name) => this.column(name)))) as Record<string, unknown>[];
   }
 
-  /** A live row by its internal id (a reference column's value), or null. */
-  async findById(id: number): Promise<BaseRecordRow | null> {
-    const rows = (await getRequestDatabase()
+  /**
+   * A live row by its internal id (a reference column's value), or null; `forUpdate` locks it until
+   * the unit of work ends — a write that depends on another record's state (a receipt on an
+   * invoice) holds it still while it checks and writes (G2-1).
+   */
+  async findById(id: number, options: { forUpdate?: boolean } = {}): Promise<BaseRecordRow | null> {
+    const query = getRequestDatabase()
       .select()
       .from(this.config.table)
       .where(and(eq(this.column('id'), id), liveRowFilter(this.config.table)))
-      .limit(1)) as BaseRecordRow[];
+      .limit(1);
+    const rows = (await (options.forUpdate ? query.for('update') : query)) as BaseRecordRow[];
     return rows[0] ?? null;
   }
 
-  /** A row of the organization by public id — live, or only a deleted one when asked. */
+  /**
+   * A row of the organization by public id — live, or only a deleted one when asked; `forUpdate`
+   * locks it (`FOR UPDATE`) until the unit of work ends, so a write validates the row it changes
+   * (G2-1).
+   */
   async findByPublicId(
     public_id: string,
     organization_id: number,
-    options: { deleted?: boolean } = {},
+    options: { deleted?: boolean; forUpdate?: boolean } = {},
   ): Promise<BaseRecordRow | null> {
     if (options.deleted && !this.softDeletes) return null;
-    const rows = (await getRequestDatabase()
+    const query = getRequestDatabase()
       .select()
       .from(this.config.table)
       .where(
@@ -1051,7 +1078,8 @@ export class BaseRecordRepository {
           options.deleted ? isNotNull(this.column('deleted_at')) : liveRowFilter(this.config.table),
         ),
       )
-      .limit(1)) as BaseRecordRow[];
+      .limit(1);
+    const rows = (await (options.forUpdate ? query.for('update') : query)) as BaseRecordRow[];
     return rows[0] ?? null;
   }
 
@@ -1068,11 +1096,15 @@ export class BaseRecordRepository {
     });
   }
 
-  /** Updates a live row; returns it, or null when it no longer exists. */
+  /**
+   * Updates a live row; returns it, or null when it no longer exists — or, with `statusGuard`, when
+   * its status is no longer one of `from` (a lifecycle rule in the statement itself, G2-1).
+   */
   async update(
     id: number,
     values: Record<string, unknown>,
     updated_by_user_id: number | null,
+    statusGuard?: { column: string; from: readonly string[] },
   ): Promise<BaseRecordRow | null> {
     const rows = (await getRequestDatabase()
       .update(this.config.table)
@@ -1081,7 +1113,13 @@ export class BaseRecordRepository {
         updated_at: sql`greatest(${this.column('created_at')}, now())`,
         updated_by_user_id,
       } as never)
-      .where(and(eq(this.column('id'), id), liveRowFilter(this.config.table)))
+      .where(
+        and(
+          eq(this.column('id'), id),
+          liveRowFilter(this.config.table),
+          statusGuard ? inArray(this.column(statusGuard.column), [...statusGuard.from]) : undefined,
+        ),
+      )
       .returning()) as BaseRecordRow[];
     return rows[0] ?? null;
   }

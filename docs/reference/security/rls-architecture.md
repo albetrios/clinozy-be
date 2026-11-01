@@ -334,7 +334,12 @@ relay the scope into services — no minting call ever appears in HTTP code.
 4. **InitPlan hygiene:** every `current_setting(...)` in a policy is wrapped as
    `( SELECT current_setting(...) )` so the planner evaluates it once per statement, not
    once per row.
-5. **Superuser masking:** none of the above is visible on a superuser connection —
+5. **Row security does not stop a foreign key naming another tenant's row.** Referential checks
+   run as the table owner with row security set aside, so a single-column key to `<parent>.id`
+   accepts any organization's id. A link between two tenant rows is the composite key
+   `(organization_id, <column>) → <parent> (organization_id, id)` (launch K8 for memberships; B2-5
+   for the role and patient-record links, `20261101101100_tenant_composite_foreign_keys.sql`).
+6. **Superuser masking:** none of the above is visible on a superuser connection —
    which is why local dev provisions the RLS-subject `clinozy_be_maintenance` pool, the
    regression suite runs `SET LOCAL ROLE clinozy_be_app`, and boot guards refuse
    superuser/BYPASSRLS on both URLs in hosted deployments.

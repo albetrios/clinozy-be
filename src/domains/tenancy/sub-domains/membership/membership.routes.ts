@@ -159,7 +159,7 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         schema: {
           summary: 'Restore membership',
           description:
-            "Undoes a member's removal — the membership is live again with its status, roles, branches and profile, and its name follows the profile again; its API keys stay revoked. A live membership is a 409, as is a person who rejoined since, or no free seat. Requires membership:delete.",
+            "Undoes a member's removal — the membership is live again with its status, roles, branches and profile, and its name follows the profile again; its API keys stay revoked. A live membership is a 409, as is a person who rejoined since, or no free seat; so is an end only the person can undo (409 `membership_not_restorable`: they left, deleted their account, declined, or their invite expired or was revoked). Restoring hands the roles back, so you must hold every code they grant (403). Requires membership:delete.",
           tags: ['Membership'],
           params: membershipIdParamsDto,
         },
@@ -176,7 +176,7 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         schema: {
           summary: 'Revoke invitation',
           description:
-            "Revokes an invited member's pending invite and removes the invited membership. Requires membership:delete.",
+            "Revokes an invited member's pending invite and removes the invited membership. As for a removal, you must hold every code the invited member's roles grant (403). Requires membership:delete.",
           tags: ['Invitation'],
           params: membershipIdParamsDto,
         },
@@ -234,7 +234,7 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         schema: {
           summary: 'Transfer organization ownership',
           description:
-            'Transfers ownership of the organization to another member. Only the current owner can perform this action. Requires a recent step-up on this session (`POST /auth/step-up`, within 10 minutes).',
+            "Transfers ownership of the organization to another active member. Only the current owner can perform this action. The Owner role becomes the new owner's main role (their previous main role stays as an extra role) and the former owner moves to the Admin role — or to `former_owner_role_id`, any role but the Owner role — in the same transaction. Requires a recent step-up on this session (`POST /auth/step-up`, within 10 minutes).",
           tags: ['Membership'],
           body: transferOwnershipDto,
         },

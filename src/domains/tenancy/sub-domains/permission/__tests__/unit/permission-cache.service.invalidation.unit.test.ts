@@ -265,4 +265,83 @@ describe('permission-cache service invalidation', () => {
       );
     expect(commitCall).toBeUndefined();
   });
+  describe('a failed invalidation never fails open (B2-9)', () => {
+    /** A Redis whose cache still holds the pre-change set for every user. */
+    function staleCacheReads() {
+      vi.mocked(redisConnection.get).mockImplementation(async (key) =>
+        String(key).startsWith('perm:org:') ? '0' : JSON.stringify(['organization:delete']),
+      );
+    }
+
+    it('retries a per-user invalidation that hits a blip, without a backstop', async () => {
+      vi.mocked(redisConnection.get).mockResolvedValue('2');
+      vi.mocked(redisConnection.del)
+        .mockRejectedValueOnce(new Error('redis blip'))
+        .mockResolvedValue(2);
+
+      await invalidatePermissions({ userId: 'user_retry', organizationId: 'org_retry' });
+
+      expect(redisConnection.del).toHaveBeenCalledTimes(2);
+      expect(captureException).not.toHaveBeenCalled();
+      expect(redisConnection.eval).not.toHaveBeenCalled();
+    });
+
+    it('bypasses the organization cache when the invalidation and the backstop both fail', async () => {
+      vi.mocked(redisConnection.get).mockResolvedValue('2');
+      vi.mocked(redisConnection.del).mockRejectedValue(new Error('redis down'));
+      vi.mocked(redisConnection.eval).mockRejectedValue(new Error('redis down'));
+
+      await invalidatePermissions({ userId: 'user_closed', organizationId: 'org_closed' });
+
+      // Every write was retried before giving up, and the failure reached Sentry.
+      expect(redisConnection.del).toHaveBeenCalledTimes(3);
+      expect(redisConnection.eval).toHaveBeenCalledTimes(3);
+      expect(captureException).toHaveBeenCalledTimes(1);
+      // Redis reads come back, still holding the old set: this organization reads as a miss
+      // (fresh from Postgres), another organization's cache is untouched.
+      staleCacheReads();
+      expect(
+        await getCachedPermissions({ userId: 'user_closed', organizationId: 'org_closed' }),
+      ).toBeNull();
+      expect(
+        await getCachedPermissions({ userId: 'user_closed', organizationId: 'org_untouched' }),
+      ).toEqual(['organization:delete']);
+    });
+
+    it('lifts the bypass once the background version bump lands', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.mocked(redisConnection.eval).mockRejectedValue(new Error('redis down'));
+        const pending = invalidateOrganizationPermissions('org_background');
+        await vi.advanceTimersByTimeAsync(1_000);
+        await pending;
+        expect(captureException).toHaveBeenCalledTimes(1);
+        staleCacheReads();
+        expect(
+          await getCachedPermissions({
+            userId: 'user_background',
+            organizationId: 'org_background',
+          }),
+        ).toBeNull();
+
+        // Redis is back: the next background retry bumps the version and the bypass ends.
+        vi.mocked(redisConnection.eval).mockResolvedValue(9 as never);
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(redisConnection.eval).toHaveBeenLastCalledWith(
+          expect.stringContaining("redis.call('INCR'"),
+          1,
+          'perm:org:org_background:v',
+          expect.any(String),
+        );
+        expect(
+          await getCachedPermissions({
+            userId: 'user_background',
+            organizationId: 'org_background',
+          }),
+        ).toEqual(['organization:delete']);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });

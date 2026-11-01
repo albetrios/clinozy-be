@@ -108,7 +108,7 @@ export function selectIdempotencyClaimCounterShardKey(): string {
  * @remarks
  * Keys are namespaced by organization and actor (never anonymous in practice — see
  * {@link hasAuthenticatedIdempotencyActor}) plus the client-supplied key, so the same key cannot
- * replay across tenants or actors. The request fingerprint (method + route + body) is intentionally
+ * replay across tenants or actors. The request fingerprint (method + route + path parameters + body) is intentionally
  * NOT part of the key: it is stored inside the cache entry and compared on a hit, so reusing one
  * key for a *different* payload collides here and is rejected with a 422 rather than silently
  * executing as a second, independent operation (Stripe-style key-reuse semantics).

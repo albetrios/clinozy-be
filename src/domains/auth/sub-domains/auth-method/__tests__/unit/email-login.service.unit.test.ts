@@ -62,7 +62,8 @@ vi.mock('@/shared/config/env.config.js', () => {
     // LOG_LEVEL is consumed at import time by logger.util.ts (pino); the mock must carry it so
     // module-init order can never surface `pino({ level: undefined })`.
     LOG_LEVEL: 'info',
-    AUTH_SESSION_MAX_AGE_DAYS: 7,
+    AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS: 43_200,
+    AUTH_SESSION_IDLE_TIMEOUT_SECONDS: 1800,
     PERSONAL_ORGANIZATION_ENABLED: false,
     SECRETS_ENCRYPTION_KEY: 'test-secret-encryption-key-for-verification-code-pepper',
     // TEST_MODE gates the send-code `debug_verification_code` affordance; the Vitest harness runs
@@ -129,6 +130,7 @@ describe('EmailLoginService', () => {
 
   const authMethodService = {
     createEmailCodeMethod: vi.fn().mockResolvedValue(undefined),
+    isLoginMethodTurnedOff: vi.fn().mockResolvedValue(false),
   } as unknown as AuthMethodService;
 
   const verificationTokenRepository = {
@@ -263,7 +265,11 @@ describe('EmailLoginService', () => {
 
     await service.sendCode({ body: { email: user.email } });
 
-    expect(redis.del).toHaveBeenCalledWith(`auth:email_code_verify_attempts:${user.public_id}`);
+    // A-8: one budget per flow — a fresh code restores both.
+    expect(redis.del).toHaveBeenCalledWith(
+      `auth:email_code_verify_attempts:login:${user.public_id}`,
+      `auth:email_code_verify_attempts:step_up:${user.public_id}`,
+    );
   });
 
   it('sendCode skips issuing (no signup, no email) when the per-email cooldown is already held', async () => {
@@ -606,12 +612,34 @@ describe('EmailLoginService', () => {
       vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue(
         passwordlessUser as never,
       );
-      // Over the shared EMAIL_CODE_VERIFY_ATTEMPT cap → reject before touching the token store.
+      // Over the step-up's own attempt cap → reject before touching the token store.
       vi.mocked(redis.eval).mockResolvedValueOnce(99);
       await expect(
         service.verifyCodeForStepUp({ userPublicId: passwordlessUser.public_id, code: 'ABC123' }),
       ).rejects.toMatchObject({ messageKey: 'errors:invalidOrExpiredVerificationCode' });
       expect(verificationTokenRepository.consumeOtpForUser).not.toHaveBeenCalled();
+    });
+
+    it('A-8: counts on its own budget, never the public sign-in one', async () => {
+      vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue(
+        passwordlessUser as never,
+      );
+      vi.mocked(verificationTokenRepository.consumeOtpForUser).mockResolvedValue({
+        id: 9,
+      } as never);
+      vi.mocked(redis.eval).mockClear();
+      await service.verifyCodeForStepUp({
+        userPublicId: passwordlessUser.public_id,
+        code: 'ABC123',
+      });
+      const countedKeys = vi.mocked(redis.eval).mock.calls.map((call) => call[2]);
+      expect(countedKeys).toEqual([
+        `auth:email_code_verify_attempts:step_up:${passwordlessUser.public_id}`,
+      ]);
+      // Success clears only the step-up budget.
+      expect(redis.del).toHaveBeenCalledWith(
+        `auth:email_code_verify_attempts:step_up:${passwordlessUser.public_id}`,
+      );
     });
   });
 });

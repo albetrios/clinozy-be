@@ -1,6 +1,5 @@
 import { sql } from 'drizzle-orm';
 import {
-  type AnyPgColumn,
   bigint,
   bigserial,
   check,
@@ -11,6 +10,7 @@ import {
   timestamp,
   uniqueIndex,
   varchar,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
@@ -47,17 +47,9 @@ export const patient_check_ins = appSchema
       organization_id: bigint('organization_id', { mode: 'number' })
         .notNull()
         .references(() => organizations.id, { onDelete: 'cascade' }),
-      patient_id: bigint('patient_id', { mode: 'number' })
-        .notNull()
-        .references((): AnyPgColumn => patients.id, { onDelete: 'restrict' }),
-      appointment_id: bigint('appointment_id', { mode: 'number' }).references(
-        (): AnyPgColumn => appointments.id,
-        { onDelete: 'set null' },
-      ),
-      patient_treatment_id: bigint('patient_treatment_id', { mode: 'number' }).references(
-        (): AnyPgColumn => patient_treatments.id,
-        { onDelete: 'set null' },
-      ),
+      patient_id: bigint('patient_id', { mode: 'number' }).notNull(),
+      appointment_id: bigint('appointment_id', { mode: 'number' }),
+      patient_treatment_id: bigint('patient_treatment_id', { mode: 'number' }),
       // "After <treatment>" or "Visit · <date>" when not sent (TR9)
       context: varchar('context', { length: 80 }).notNull(),
       feel: varchar('feel', { length: 11 }).notNull(),
@@ -71,16 +63,44 @@ export const patient_check_ins = appSchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       deleted_at: timestamp('deleted_at', { withTimezone: true }),
       delete_reason: varchar('delete_reason', { length: 20 }),
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
-      index('idx_patient_check_ins_organization_id').on(table.organization_id),
+      uniqueIndex('idx_patient_check_ins_organization_id_id').on(table.organization_id, table.id),
+      // The SQL says ON DELETE SET NULL ("appointment_id"): organization_id is kept.
+      foreignKey({
+        name: 'patient_check_ins_appointment_fk',
+        columns: [table.organization_id, table.appointment_id],
+        foreignColumns: [appointments.organization_id, appointments.id],
+      }).onDelete('set null'),
+      index('idx_patient_check_ins_organization_appointment')
+        .on(table.organization_id, table.appointment_id)
+        .where(sql`${table.appointment_id} IS NOT NULL`),
+      foreignKey({
+        name: 'patient_check_ins_patient_fk',
+        columns: [table.organization_id, table.patient_id],
+        foreignColumns: [patients.organization_id, patients.id],
+      }).onDelete('restrict'),
+      index('idx_patient_check_ins_organization_patient')
+        .on(table.organization_id, table.patient_id)
+        .where(sql`${table.patient_id} IS NOT NULL`),
+      // The SQL says ON DELETE SET NULL ("patient_treatment_id"): organization_id is kept.
+      foreignKey({
+        name: 'patient_check_ins_patient_treatment_fk',
+        columns: [table.organization_id, table.patient_treatment_id],
+        foreignColumns: [patient_treatments.organization_id, patient_treatments.id],
+      }).onDelete('set null'),
+      index('idx_patient_check_ins_organization_patient_treatment')
+        .on(table.organization_id, table.patient_treatment_id)
+        .where(sql`${table.patient_treatment_id} IS NOT NULL`),
       uniqueIndex('idx_patient_check_ins_public_id').on(table.public_id),
       // The card, and the previous score
       index('idx_patient_check_ins_patient_date').on(

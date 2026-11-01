@@ -1,5 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { requireRecentStepUpPreHandler } from '@/shared/middlewares/core/recent-step-up.middleware.js';
+import {
+  requireRecentStepUpPreHandler,
+  requireStrongRecentStepUpPreHandler,
+  requireStrongRecentStepUpWhenBodyHas,
+} from '@/shared/middlewares/core/recent-step-up.middleware.js';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
   EXPENSIVE_AUTHED_RATE_LIMIT,
@@ -79,10 +83,15 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       // route-#4: bound admin user-mutations so a compromised admin token cannot bulk-edit accounts.
       ...MODERATE_AUTHED_RATE_LIMIT,
       onRequest: [app.authenticate],
-      preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
+      // A-2: a `status` change suspends or reactivates the account — strong step-up, like suspend.
+      preHandler: [
+        requireRole(GLOBAL_ROLES.SUPER_ADMIN),
+        requireStrongRecentStepUpWhenBodyHas('status'),
+      ],
       schema: {
         summary: 'Update user (admin)',
-        description: "Updates a user's profile or status. Requires the SUPER_ADMIN role.",
+        description:
+          "Updates a user's profile or status. Requires the SUPER_ADMIN role on an MFA-verified session; a `status` change also requires a recent password or MFA step-up on this session.",
         tags: ['User Management'],
         params: userIdParamsDto,
         body: AdminUpdateUserDto,
@@ -96,11 +105,11 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       // route-#4: stronger bound on the destructive admin delete (matches DELETE /me).
       ...EXPENSIVE_AUTHED_RATE_LIMIT,
       onRequest: [app.authenticate],
-      preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
+      preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN), requireStrongRecentStepUpPreHandler],
       schema: {
         summary: 'Delete user (admin)',
         description:
-          'Deletes a user account: sessions are revoked and the account disappears at once; the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires the SUPER_ADMIN role.',
+          'Deletes a user account: sessions are revoked and the account disappears at once; the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires the SUPER_ADMIN role on an MFA-verified session and a recent password or MFA step-up on this session.',
         tags: ['User Management'],
         params: userIdParamsDto,
       },
@@ -112,10 +121,11 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
     {
       ...MODERATE_AUTHED_RATE_LIMIT,
       onRequest: [app.authenticate],
-      preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
+      preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN), requireStrongRecentStepUpPreHandler],
       schema: {
         summary: 'Suspend user (admin)',
-        description: 'Suspends a user account, preventing login. Requires the SUPER_ADMIN role.',
+        description:
+          'Suspends a user account, preventing login. Requires the SUPER_ADMIN role on an MFA-verified session and a recent password or MFA step-up on this session.',
         tags: ['User Management'],
         params: userIdParamsDto,
       },

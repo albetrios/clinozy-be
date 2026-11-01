@@ -63,6 +63,9 @@ import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js'
  *   `ConflictError` for a unique clash, a record changed since it was opened (`expected_updated_at`,
  *   D43), an action its status does not allow, or a restore of a live record.
  * - **Side effects:** writes stamp the acting user; a delete keeps the row (purged later, D38).
+ * - **Notes:** every write (change, action, delete, restore) reads its row `FOR UPDATE` in its own
+ *   unit of work, so a rule checks the row the write changes and a concurrent write waits; an
+ *   action's `from` statuses ride in its `UPDATE` too, as a backstop (G2-1).
  */
 export class BaseRecordService<Output> {
   constructor(
@@ -356,6 +359,7 @@ export class BaseRecordService<Output> {
             updated_by_user_id: userId,
           }),
         );
+        await this.bindUploads({ organizationId, owner: row, values });
         await this.writeReferenceLists({ organizationId, ownerId: row.id, lists, userId });
         await this.writeChildLists({ owner: row, children });
         await this.descriptor.afterWrite?.(row, { kind: 'create' }, context);
@@ -386,7 +390,13 @@ export class BaseRecordService<Output> {
       callback: async () => {
         const organizationId = await this.organizationId(scope);
         const userId = await this.userId(actingUserPublicId);
-        const existing = await this.requireRow({ organizationId, publicId, userId, visibility });
+        const existing = await this.requireRow({
+          organizationId,
+          publicId,
+          userId,
+          visibility,
+          lock: true,
+        });
         await this.assertUnderParent({
           organizationId,
           row: existing,
@@ -407,6 +417,7 @@ export class BaseRecordService<Output> {
           this.descriptor.repository.update(existing.id, values, userId),
         );
         if (!updated) throw new NotFoundError(this.descriptor.label);
+        await this.bindUploads({ organizationId, owner: updated, values });
         await this.writeReferenceLists({ organizationId, ownerId: updated.id, lists, userId });
         await this.writeChildLists({ owner: updated, children });
         await this.descriptor.afterWrite?.(updated, { kind: 'update', before: existing }, context);
@@ -457,7 +468,13 @@ export class BaseRecordService<Output> {
       callback: async () => {
         const organizationId = await this.organizationId(scope);
         const userId = await this.userId(actingUserPublicId);
-        const existing = await this.requireRow({ organizationId, publicId, userId, visibility });
+        const existing = await this.requireRow({
+          organizationId,
+          publicId,
+          userId,
+          visibility,
+          lock: true,
+        });
         await this.assertUnderParent({
           organizationId,
           row: existing,
@@ -466,23 +483,25 @@ export class BaseRecordService<Output> {
           visibility,
         });
         const statusColumn = transition.statusColumn ?? 'status';
-        const currentStatus = existing[statusColumn];
-        const status = typeof currentStatus === 'string' ? currentStatus : '';
-        if (transition.from && !transition.from.includes(status)) {
-          throw new ConflictError('errors:recordTransitionNotAllowed', {
-            action,
-            status,
-          }).withReason('transition_not_allowed');
-        }
+        assertTransitionAllowed({ action, transition, status: existing[statusColumn] });
         const values: Record<string, unknown> = { ...(transition.set ?? {}), ...extra };
         for (const column of transition.stamp ?? []) values[column] = new Date();
         await this.resolveReferences({ organizationId, values });
         const context = this.writeContext({ scope, organizationId, userId, visibility });
         await this.descriptor.prepareTransition?.(action, values, existing, context);
         this.descriptor.checkValues?.({ ...existing, ...values });
+        // The status rule rides in the statement too — the row lock is the guard, this the backstop.
         const updated = await this.mapConflicts(() =>
-          this.descriptor.repository.update(existing.id, values, userId),
+          this.descriptor.repository.update(
+            existing.id,
+            values,
+            userId,
+            transition.from ? { column: statusColumn, from: transition.from } : undefined,
+          ),
         );
+        if (!updated && transition.from) {
+          throw transitionNotAllowed({ action, status: existing[statusColumn] });
+        }
         if (!updated) throw new NotFoundError(this.descriptor.label);
         await this.descriptor.afterWrite?.(
           updated,
@@ -519,7 +538,13 @@ export class BaseRecordService<Output> {
       callback: async () => {
         const organizationId = await this.organizationId(scope);
         const userId = await this.userId(actingUserPublicId);
-        const existing = await this.requireRow({ organizationId, publicId, userId, visibility });
+        const existing = await this.requireRow({
+          organizationId,
+          publicId,
+          userId,
+          visibility,
+          lock: true,
+        });
         await this.assertUnderParent({
           organizationId,
           row: existing,
@@ -568,6 +593,7 @@ export class BaseRecordService<Output> {
           publicId: options.publicId,
           userId,
           visibility: options.visibility,
+          lock: true,
         });
         await this.assertUnderParent({
           organizationId,
@@ -758,6 +784,7 @@ export class BaseRecordService<Output> {
         const { repository } = this.descriptor;
         const deleted = await repository.findByPublicId(publicId, organizationId, {
           deleted: true,
+          forUpdate: true,
         });
         if (
           deleted &&
@@ -955,19 +982,27 @@ export class BaseRecordService<Output> {
     );
   }
 
-  /** A live row of the organization by public id (the actor's own, when owned); 404 otherwise. */
+  /**
+   * A live row of the organization by public id (the actor's own, when owned); 404 otherwise. A
+   * write passes `lock`: the row is read `FOR UPDATE`, so its status rules are checked against the
+   * row the write changes and a concurrent write waits for this one (G2-1).
+   */
   protected async requireRow({
     organizationId,
     publicId,
     userId,
     visibility,
+    lock = false,
   }: {
     organizationId: number;
     publicId: string;
     userId: number | null;
     visibility?: BaseRecordVisibility | undefined;
+    lock?: boolean;
   }): Promise<BaseRecordRow> {
-    const row = await this.descriptor.repository.findByPublicId(publicId, organizationId);
+    const row = await this.descriptor.repository.findByPublicId(publicId, organizationId, {
+      forUpdate: lock,
+    });
     if (!row) throw new NotFoundError(this.descriptor.label);
     if (!(await this.isOwnersRow({ organizationId, row, userId }))) {
       throw new NotFoundError(this.descriptor.label);
@@ -1327,6 +1362,38 @@ export class BaseRecordService<Output> {
     });
   }
 
+  /**
+   * C-2: binds each upload key a write sends to the record it was written to. A key already bound
+   * to another record is a 400 on its field; the refusal throws inside the write's transaction, so
+   * the write rolls back with it.
+   */
+  private async bindUploads({
+    organizationId,
+    owner,
+    values,
+  }: {
+    organizationId: number;
+    owner: BaseRecordRow;
+    values: Record<string, unknown>;
+  }): Promise<void> {
+    for (const { field, resource } of this.descriptor.uploadFields ?? []) {
+      if (!(field in values)) continue;
+      const fileKeys = uploadKeysOf(values[field]);
+      if (fileKeys.length === 0) continue;
+      const bound = await this.ports.bindUploadKeys({
+        organizationId,
+        fileKeys,
+        owner: { resource, publicId: owner.public_id },
+      });
+      if (bound < new Set(fileKeys).size) {
+        throw fieldValidationError({
+          field,
+          messageKey: 'errors:validation.uploadKeyAttachedElsewhere',
+        });
+      }
+    }
+  }
+
   /** Runs a write; a unique or exclusion clash the table names becomes a 409. */
   private async mapConflicts<T>(write: () => Promise<T>): Promise<T> {
     try {
@@ -1371,6 +1438,29 @@ function referenceNotFound({
   );
 }
 
+/** The 409 of a lifecycle action the record's status does not allow. */
+function transitionNotAllowed({ action, status }: { action: string; status: unknown }) {
+  return new ConflictError('errors:recordTransitionNotAllowed', {
+    action,
+    status: typeof status === 'string' ? status : '',
+  }).withReason('transition_not_allowed');
+}
+
+/** Refuses an action whose `from` statuses do not include the record's (409). */
+function assertTransitionAllowed({
+  action,
+  transition,
+  status,
+}: {
+  action: string;
+  transition: { from?: readonly string[] | undefined };
+  status: unknown;
+}): void {
+  if (!transition.from) return;
+  if (typeof status === 'string' && transition.from.includes(status)) return;
+  throw transitionNotAllowed({ action, status });
+}
+
 /** Ports before the app container wires them — a rule that calls one fails loudly. */
 const UNWIRED_PORTS: BaseRecordPorts = {
   organizationSettings: () => {
@@ -1388,7 +1478,17 @@ const UNWIRED_PORTS: BaseRecordPorts = {
   thumbnailReadUrls: () => {
     throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
   },
+  bindUploadKeys: () => {
+    throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
+  },
 };
+
+/** The upload keys a field holds: a list of keys, one key, or nothing. */
+function uploadKeysOf(value: unknown): string[] {
+  if (Array.isArray(value))
+    return value.filter((entry): entry is string => typeof entry === 'string');
+  return typeof value === 'string' ? [value] : [];
+}
 
 /**
  * Each key's confirmed upload of the organization, in order (an entry's attachments M6, a photo

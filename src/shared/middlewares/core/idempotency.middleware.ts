@@ -112,7 +112,7 @@ interface CompletedIdempotencyEntry {
   statusCode: number;
   body: string;
   headers: Record<string, string>;
-  /** Fingerprint (method + route + body) of the request that produced this entry; used to reject key reuse with a different payload. */
+  /** Fingerprint (method + route + path parameters + body) of the request that produced this entry; used to reject key reuse with a different payload or on another record. */
   fingerprint: string;
 }
 
@@ -311,7 +311,7 @@ function sendInFlightConflict(request: FastifyRequest, reply: FastifyReply): Fas
 
 /**
  * Rejects a request that reuses an `X-Idempotency-Key` already associated with a *different* request
- * payload (method + route + body fingerprint mismatch). Returns 422 so the client knows the key was
+ * payload or on another record (method + route + path parameters + body fingerprint mismatch). Returns 422 so the client knows the key was
  * reused incorrectly rather than retrying the same operation — matching Stripe-style semantics and
  * preventing a divergent second operation from executing under the same key.
  */
@@ -455,6 +455,8 @@ async function idempotencyClaimPreHandler(
   const requestFingerprint = buildIdempotencyRequestFingerprint({
     method: request.method,
     routePath,
+    // G2-6: the concrete record — the template alone let a key replay across records.
+    pathParameters: request.params,
     body: request.body,
   });
   requestWithIdempotency._idempotencyRequestFingerprint = requestFingerprint;

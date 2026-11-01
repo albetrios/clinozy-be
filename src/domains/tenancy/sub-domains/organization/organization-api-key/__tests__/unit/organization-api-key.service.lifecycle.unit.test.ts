@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConflictError, ForbiddenError, NotFoundError } from '@/shared/errors/index.js';
-import { assertCallerCanGrantPermissionCodes } from '@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js';
+import {
+  assertCallerCanGrantPermissionCodes,
+  assertCallerHoldsMemberPermissionCodes,
+} from '@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js';
 
-// The grant-permission guard has its own tests; here it is a no-op so we focus on lifecycle flow.
+// The grant-permission and role-ordering guards have their own tests; here they are no-ops so we
+// focus on lifecycle flow (and on which guard runs with what).
 vi.mock('@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js', () => ({
   assertCallerCanGrantPermissionCodes: vi.fn().mockResolvedValue(undefined),
+  assertCallerHoldsMemberPermissionCodes: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/infrastructure/database/contexts/database-context.js', async (importOriginal) => {
@@ -49,12 +54,17 @@ const KEY_ROW = {
   key_prefix: 'ak_12345',
   scopes: ['api-key:read'],
   status: 'ACTIVE',
+  created_by_user_id: 7,
 };
+
+/** What the key's creator (user 7) holds in the organization now. */
+const CREATOR_CODES = ['api-key:read', 'api-key:manage', 'organization:delete'];
 
 function buildService() {
   const organizationRepository = {
     findByPublicId: vi.fn().mockResolvedValue(ORG),
     resolveUserIdByPublicId: vi.fn().mockResolvedValue(42),
+    resolveUserPublicIdByInternalId: vi.fn().mockResolvedValue('creator_public'),
   };
   const apiKeyRepository = {
     findByOrganizationId: vi.fn().mockResolvedValue({ items: [KEY_ROW], next_cursor: null }),
@@ -72,7 +82,10 @@ function buildService() {
   const service = new OrganizationApiKeyService(
     organizationRepository as never,
     apiKeyRepository as never,
-    { resolveUserOrganizationPermissions: vi.fn().mockResolvedValue([]) } as never,
+    {
+      resolveUserOrganizationPermissions: vi.fn().mockResolvedValue([]),
+      resolveUserOrganizationPermissionsFromDatabase: vi.fn().mockResolvedValue(CREATOR_CODES),
+    } as never,
     { findAll: vi.fn().mockResolvedValue([]) } as never,
   );
   return { service, organizationRepository, apiKeyRepository };
@@ -362,6 +375,39 @@ describe('OrganizationApiKeyService lifecycle', () => {
         service.delete({ scope: asScope('org_public'), api_key_public_id: 'apikey_public' }),
       ).resolves.toBeUndefined();
       expect(apiKeyRepository.softDelete).toHaveBeenCalledWith('apikey_public', ORG.id);
+    });
+
+    it("holds the caller to role ordering over the key's creator before deleting (B2-11)", async () => {
+      const { service, apiKeyRepository } = buildService();
+      vi.mocked(assertCallerHoldsMemberPermissionCodes).mockRejectedValueOnce(
+        new ForbiddenError('errors:cannotManageMemberWithPermissionsNotHeld'),
+      );
+      await expect(
+        service.delete({
+          scope: asScope('org_public'),
+          api_key_public_id: 'apikey_public',
+          options: { callerApiKeyScopes: ['api-key:manage'] },
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenError);
+      expect(assertCallerHoldsMemberPermissionCodes).toHaveBeenCalledWith(
+        expect.objectContaining({
+          memberPermissionCodes: CREATOR_CODES,
+          callerApiKeyScopes: ['api-key:manage'],
+          organizationPublicId: 'org_public',
+        }),
+      );
+      expect(apiKeyRepository.softDelete).not.toHaveBeenCalled();
+    });
+
+    it('skips role ordering for a key whose creator is gone', async () => {
+      const { service, apiKeyRepository } = buildService();
+      apiKeyRepository.findByPublicId.mockResolvedValueOnce({
+        ...KEY_ROW,
+        created_by_user_id: null,
+      });
+      await service.delete({ scope: asScope('org_public'), api_key_public_id: 'apikey_public' });
+      expect(assertCallerHoldsMemberPermissionCodes).not.toHaveBeenCalled();
+      expect(apiKeyRepository.softDelete).toHaveBeenCalled();
     });
   });
 

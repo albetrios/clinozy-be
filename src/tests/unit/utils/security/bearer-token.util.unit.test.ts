@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest';
-import { isBearerTokenValid } from '@/shared/utils/security/bearer-token.util.js';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { resetEnvCacheForTests } from '@/shared/config/env.config.js';
+import {
+  isBearerTokenValid,
+  isMetricsScrapeTokenPresented,
+} from '@/shared/utils/security/bearer-token.util.js';
 
 describe('bearer-token.util', () => {
   it('returns true for a header with the matching Bearer scheme and token', () => {
@@ -72,5 +76,30 @@ describe('bearer-token.util', () => {
         expectedBearerToken: 's3cret-token',
       }),
     ).toBe(false);
+  });
+});
+
+describe('isMetricsScrapeTokenPresented', () => {
+  const token = 'scrape-token-scrape-token-scrape-token';
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetEnvCacheForTests();
+  });
+
+  it('accepts exactly the configured METRICS_SCRAPE_TOKEN as a Bearer header', () => {
+    vi.stubEnv('METRICS_SCRAPE_TOKEN', token);
+    resetEnvCacheForTests();
+    expect(isMetricsScrapeTokenPresented(`Bearer ${token}`)).toBe(true);
+    expect(isMetricsScrapeTokenPresented(`Bearer ${token}x`)).toBe(false);
+    expect(isMetricsScrapeTokenPresented(undefined)).toBe(false);
+  });
+
+  it('refuses every request when no scrape token is configured', () => {
+    vi.stubEnv('METRICS_ENABLED', 'false');
+    vi.stubEnv('METRICS_SCRAPE_TOKEN', undefined);
+    resetEnvCacheForTests();
+    expect(isMetricsScrapeTokenPresented('Bearer ')).toBe(false);
+    expect(isMetricsScrapeTokenPresented(undefined)).toBe(false);
   });
 });

@@ -75,9 +75,10 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 6 * * 1'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # The development environment has no protection rules, so a scheduled job can
-    # read its secrets without an approval prompt (production's copy would require
-    # the reviewer gate weekly; it is covered at use time in post-merge-ci).
+    # The development environment has no required reviewers (it allows the main branch only,
+    # where a scheduled job runs), so a scheduled job can read its secrets without an approval
+    # prompt (production's copy would require the reviewer gate weekly; it is covered at use
+    # time in post-merge-ci).
     environment: development
     steps:
       - name: Probe RELEASE_PLEASE_TOKEN for expiry

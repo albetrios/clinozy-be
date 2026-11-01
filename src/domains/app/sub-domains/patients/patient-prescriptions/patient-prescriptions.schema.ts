@@ -37,6 +37,36 @@ function textAtMost({ column, max }: { column: AnyPgColumn; max: number }): SQL 
 }
 
 /**
+ * A prescription's links to its clinic's visit and patient (B2-5): each a composite key
+ * `(organization_id, <column>)` to the parent's `(organization_id, id)`, so a row cannot name
+ * another clinic's record, with the index its delete action uses
+ * (`20261101101100_tenant_composite_foreign_keys.sql`).
+ */
+function patientPrescriptionLinks(
+  table: Record<'organization_id' | 'appointment_id' | 'patient_id', AnyPgColumn>,
+) {
+  return [
+    // The SQL says ON DELETE SET NULL ("appointment_id"): organization_id is kept.
+    foreignKey({
+      name: 'patient_prescriptions_appointment_fk',
+      columns: [table.organization_id, table.appointment_id],
+      foreignColumns: [appointments.organization_id, appointments.id],
+    }).onDelete('set null'),
+    index('idx_patient_prescriptions_organization_appointment')
+      .on(table.organization_id, table.appointment_id)
+      .where(sql`${table.appointment_id} IS NOT NULL`),
+    foreignKey({
+      name: 'patient_prescriptions_patient_fk',
+      columns: [table.organization_id, table.patient_id],
+      foreignColumns: [patients.organization_id, patients.id],
+    }).onDelete('restrict'),
+    index('idx_patient_prescriptions_organization_patient')
+      .on(table.organization_id, table.patient_id)
+      .where(sql`${table.patient_id} IS NOT NULL`),
+  ];
+}
+
+/**
  * Drizzle table for `app.patient_prescriptions` — a doctor's prescription for a patient, a draft
  * until a prescriber approves it, then final (launch ROUTE #133, routes-final 7.C).
  *
@@ -59,13 +89,8 @@ export const patient_prescriptions = appSchema
         .references(() => organizations.id, { onDelete: 'cascade' }),
       // The "RX-500" of the prescription list — per organization, never reused
       prescription_number: integer('prescription_number').notNull().default(0),
-      patient_id: bigint('patient_id', { mode: 'number' })
-        .notNull()
-        .references((): AnyPgColumn => patients.id, { onDelete: 'restrict' }),
-      appointment_id: bigint('appointment_id', { mode: 'number' }).references(
-        (): AnyPgColumn => appointments.id,
-        { onDelete: 'set null' },
-      ),
+      patient_id: bigint('patient_id', { mode: 'number' }).notNull(),
+      appointment_id: bigint('appointment_id', { mode: 'number' }),
       doctor_membership_id: bigint('doctor_membership_id', { mode: 'number' }).notNull(),
       prescription_date: date('prescription_date', { mode: 'string' }).notNull(),
       items: jsonb('items').notNull().default([]),
@@ -82,15 +107,18 @@ export const patient_prescriptions = appSchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       deleted_at: timestamp('deleted_at', { withTimezone: true }),
       delete_reason: varchar('delete_reason', { length: 20 }),
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      ...patientPrescriptionLinks(table),
       uniqueIndex('idx_patient_prescriptions_public_id').on(table.public_id),
       uniqueIndex('idx_patient_prescriptions_organization_prescription_number').on(
         table.organization_id,

@@ -17,5 +17,12 @@
   "invitationFallbackInviter": "A team member",
   "copyUrlPrompt": "Or copy and paste this URL into your browser:",
   "automatedFooter": "This is an automated message. Please do not reply.",
-  "notificationViewDetails": "View Details"
+  "notificationViewDetails": "View Details",
+  "securityNoticeFactorEnrolledSubject": "A new sign-in factor was added to your account",
+  "securityNoticeFactorEnrolledHtml": "<p>A new authenticator app or passkey was just added to your account.</p>",
+  "securityNoticeSessionsRevokedSubject": "Your other sessions were signed out",
+  "securityNoticeSessionsRevokedHtml": "<p>Every other session on your account was just signed out.</p>",
+  "securityNoticePasswordChangedSubject": "Your password was changed",
+  "securityNoticePasswordChangedHtml": "<p>The password on your account was just changed.</p>",
+  "securityNoticeNotYouHtml": "<p><strong>This wasn't me?</strong> Someone else may have access to your account or your email inbox. Contact support right away and review your account's sign-in methods and sessions.</p>"
 }

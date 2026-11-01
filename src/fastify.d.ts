@@ -1,5 +1,5 @@
 import 'fastify';
-import type { TFunction, i18n } from 'i18next';
+import type { TFunction } from 'i18next';
 import type { AuditContainer } from '@/domains/audit/audit.container.js';
 import type { AuthContainer } from '@/domains/auth/auth.container.js';
 import type { BillingContainer } from '@/domains/billing/billing.container.js';
@@ -10,6 +10,7 @@ import type { UploadContainer } from '@/domains/upload/upload.container.js';
 import type { UserContainer } from '@/domains/user/user.container.js';
 import type { AuthContext } from '@/shared/types/index.js';
 import type { PrincipalDatabaseScope } from '@/infrastructure/database/contexts/database-context.js';
+import type { FailedAuthenticationRateLimit } from '@/shared/middlewares/rate-limit/failed-authentication-rate-limit.js';
 import type { FastifyReply } from 'fastify';
 import type Stripe from 'stripe';
 
@@ -40,18 +41,19 @@ declare module 'fastify' {
     /** Set by stripe webhook ingress plugin after signature verification. */
     stripeWebhookEvent?: Stripe.Event;
     metricsStartTimeNanoseconds?: bigint;
-    /** i18n translate function (set by i18n middleware when not on ignoreRoutes). */
+    /** i18n translate function fixed to `language` (set by the i18n middleware on every request). */
     t?: TFunction;
-    /** Detected language code (e.g. "en", "es"). */
+    /** The request's supported language code (`SUPPORTED_LANGUAGES`: "en", "es"). */
     language?: string;
-    /** Resolved language hierarchy. */
-    languages?: string[];
-    /** i18n instance for this request (clone). */
-    i18n?: i18n;
   }
 
   interface FastifyInstance {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    /**
+     * Per-address failed-authentication limiter (`rate-limit.middleware.ts`); absent on minimal
+     * harnesses that do not register the rate-limit middleware.
+     */
+    failedAuthenticationRateLimit?: FailedAuthenticationRateLimit;
     /** Wired by domain `register*Container` functions via `domainContainersPlugin`. */
     userDomain: UserContainer;
     tenancyDomain: TenancyContainer;

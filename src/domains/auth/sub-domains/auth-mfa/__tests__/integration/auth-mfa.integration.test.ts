@@ -11,6 +11,11 @@ import { createTestUser, createTestUserWithPassword } from '@/tests/factories/us
 import { generateTestToken, generateTestTokenAndSession } from '@/tests/helpers/test-auth.js';
 import { seedRecentStepUpForTestUser } from '@/tests/helpers/test-step-up.helper.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
+import { auth_methods } from '@/domains/auth/sub-domains/auth-method/auth-method.schema.js';
+import { mail_outbox } from '@/infrastructure/mail/mail-outbox.schema.js';
+import { PROVISIONAL_FACTOR_PERIOD_SECONDS } from '@/shared/constants/security.constants.js';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 
 describe('MFA Sub-Domain — Integration', () => {
@@ -361,6 +366,162 @@ describe('MFA Sub-Domain — Integration', () => {
       expect(mfaLogin.statusCode, mfaLogin.body).toBe(200);
       const mfaLoginBody = (mfaLogin.json() as { data: { access_token?: string } }).data;
       expect(mfaLoginBody.access_token).toBeTypeOf('string');
+    });
+  });
+
+  /**
+   * A-1: brief mailbox access to a passwordless account opens an email-code step-up, which can
+   * enroll a TOTP factor. That factor must not be a strong step-up factor for 72 hours, and never on
+   * the session that enrolled it — otherwise it signs the owner out everywhere and removes their
+   * credentials. The owner is emailed about the enrollment.
+   */
+  describe('a factor enrolled under an email-code window is provisional (A-1)', () => {
+    /** TOTP code of the 30 s window `offsetSeconds` from now (server tolerance is ±1 window). */
+    function totpCodeAt({ secret, offsetSeconds }: { secret: string; offsetSeconds: number }) {
+      return generateTotpCode({ secret, epoch: Math.floor(Date.now() / 1000) + offsetSeconds });
+    }
+
+    /** Enrolls a TOTP factor for a passwordless user on a session stepped up by email code. */
+    async function enrollUnderEmailCodeWindow() {
+      const user = await createTestUser({ isEmailVerified: true });
+      const { token, sessionPublicId } = await generateTestTokenAndSession({
+        userId: user.public_id,
+      });
+      await seedRecentStepUpForTestUser(user.public_id, sessionPublicId, 'email_code');
+      const enroll = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/me/mfa/enroll'),
+        token,
+        payload: { method_type: 'MFA_TOTP' },
+      });
+      expect(enroll.statusCode, enroll.body).toBe(200);
+      const { secret } = (enroll.json() as { data: { secret: string } }).data;
+      const confirm = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/me/mfa/enroll/confirm'),
+        token,
+        payload: { code: await totpCodeAt({ secret, offsetSeconds: 0 }) },
+      });
+      expect(confirm.statusCode, confirm.body).toBe(200);
+      return { user, token, sessionPublicId, secret };
+    }
+
+    async function stepUpWithTotp({ token, code }: { token: string; code: string }) {
+      const verify = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/me/mfa/verify'),
+        token,
+        payload: { code },
+      });
+      expect(verify.statusCode, verify.body).toBe(200);
+    }
+
+    /** `DELETE /auth/me/sessions` — signs out every other session; needs a strong step-up. */
+    function signOutEverywhereElse(token: string) {
+      return injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath('/auth/me/sessions'),
+        token,
+      });
+    }
+
+    async function endProvisionalPeriod(userId: number) {
+      await getOperatorDatabase()
+        .update(auth_methods)
+        .set({ provisional_until: new Date(Date.now() - 1000) })
+        .where(and(eq(auth_methods.user_id, userId), isNull(auth_methods.revoked_at)));
+    }
+
+    it('records the factor as provisional and emails the owner', async () => {
+      const { user, sessionPublicId } = await enrollUnderEmailCodeWindow();
+
+      const [factor] = await getOperatorDatabase()
+        .select({
+          provisionalUntil: auth_methods.provisional_until,
+          enrolledOn: auth_methods.enrolled_on_session_public_id,
+        })
+        .from(auth_methods)
+        .where(and(eq(auth_methods.user_id, user.id), eq(auth_methods.method_type, 'MFA_TOTP')));
+      expect(factor?.enrolledOn).toBe(sessionPublicId);
+      const provisionalForMilliseconds = (factor?.provisionalUntil?.getTime() ?? 0) - Date.now();
+      expect(provisionalForMilliseconds).toBeGreaterThan(
+        (PROVISIONAL_FACTOR_PERIOD_SECONDS - 60) * 1000,
+      );
+
+      const notices = await getOperatorDatabase()
+        .select({ to: mail_outbox.to_addresses, subject: mail_outbox.subject })
+        .from(mail_outbox)
+        .where(eq(mail_outbox.subject, 'A new sign-in factor was added to your account'));
+      expect(notices.map((notice) => notice.to)).toContainEqual([user.email]);
+    });
+
+    it('never counts as strong on the session that enrolled it, even after the period', async () => {
+      const { user, token, secret } = await enrollUnderEmailCodeWindow();
+
+      await stepUpWithTotp({ token, code: await totpCodeAt({ secret, offsetSeconds: 30 }) });
+      const whileProvisional = await signOutEverywhereElse(token);
+      expect(whileProvisional.statusCode, whileProvisional.body).toBe(403);
+
+      await endProvisionalPeriod(user.id);
+      await stepUpWithTotp({ token, code: await totpCodeAt({ secret, offsetSeconds: -30 }) });
+      const afterPeriod = await signOutEverywhereElse(token);
+      expect(afterPeriod.statusCode, afterPeriod.body).toBe(403);
+    });
+
+    it('counts as strong on another session once the period has passed', async () => {
+      const { user, secret } = await enrollUnderEmailCodeWindow();
+      const otherToken = await generateTestToken({ userId: user.public_id });
+
+      await stepUpWithTotp({
+        token: otherToken,
+        code: await totpCodeAt({ secret, offsetSeconds: 30 }),
+      });
+      const whileProvisional = await signOutEverywhereElse(otherToken);
+      expect(whileProvisional.statusCode, whileProvisional.body).toBe(403);
+
+      await endProvisionalPeriod(user.id);
+      await stepUpWithTotp({
+        token: otherToken,
+        code: await totpCodeAt({ secret, offsetSeconds: -30 }),
+      });
+      const afterPeriod = await signOutEverywhereElse(otherToken);
+      expect(afterPeriod.statusCode, afterPeriod.body).toBe(204);
+
+      const notices = await getOperatorDatabase()
+        .select({ to: mail_outbox.to_addresses })
+        .from(mail_outbox)
+        .where(eq(mail_outbox.subject, 'Your other sessions were signed out'));
+      expect(notices.map((notice) => notice.to)).toContainEqual([user.email]);
+    });
+
+    it('a factor enrolled under a password step-up is strong at once', async () => {
+      const { user, password } = await createTestUserWithPassword({ isEmailVerified: true });
+      const token = await generateTestToken({ userId: user.public_id });
+      const stepUp = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/step-up'),
+        token,
+        payload: { password },
+      });
+      expect(stepUp.statusCode, stepUp.body).toBe(200);
+      const enroll = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/me/mfa/enroll'),
+        token,
+        payload: { method_type: 'MFA_TOTP' },
+      });
+      const { secret } = (enroll.json() as { data: { secret: string } }).data;
+      const confirm = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/me/mfa/enroll/confirm'),
+        token,
+        payload: { code: await totpCodeAt({ secret, offsetSeconds: 0 }) },
+      });
+      expect(confirm.statusCode, confirm.body).toBe(200);
+
+      await stepUpWithTotp({ token, code: await totpCodeAt({ secret, offsetSeconds: 30 }) });
+      const signedOut = await signOutEverywhereElse(token);
+      expect(signedOut.statusCode, signedOut.body).toBe(204);
     });
   });
 

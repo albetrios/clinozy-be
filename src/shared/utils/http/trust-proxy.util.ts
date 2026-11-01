@@ -16,7 +16,9 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
  *   count. Never throws on local/CI (proxy-less) deployments.
  * - **Side effects:** emits one `trust_proxy.resolved` log line; performs no I/O.
  * - **Notes:** Railway fronts each service with exactly one proxy hop, so `TRUST_PROXY=1`.
- *   Add one per additional trusted reverse proxy in front of the app. Kept out of
+ *   Add one per additional trusted reverse proxy in front of the app. A hop count trusts
+ *   whatever peer connects; when the app is reachable around the proxy, list the proxy
+ *   addresses instead (`TRUST_PROXY=<CIDR>,<CIDR>`, D-6). Kept out of
  *   `fastify-server.util.ts` to avoid a circular import (logger.util ← fastify-server.util).
  */
 export function assertHostedTrustProxyConfigured(): void {
@@ -26,8 +28,9 @@ export function assertHostedTrustProxyConfigured(): void {
     throw new Error(
       'trust_proxy.hosted_unset: TRUST_PROXY is unset/false in a hosted deployment. Behind ' +
         'Railway or a load balancer this makes every client appear as the proxy IP, collapsing ' +
-        'per-IP rate limits and audit IP attribution. Set TRUST_PROXY to the number of trusted ' +
-        'reverse-proxy hops (TRUST_PROXY=1 behind Railway). See .env.example.',
+        'per-IP rate limits and audit IP attribution. Set TRUST_PROXY to the trusted proxy ' +
+        'addresses (a CIDR list) or the number of trusted reverse-proxy hops (TRUST_PROXY=1 ' +
+        'behind Railway). See .env.example.',
     );
   }
 

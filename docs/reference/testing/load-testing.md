@@ -355,7 +355,7 @@ The same signals are observable live via `GET /readyz` (verbose), `GET /metrics`
 ### 7. Admin
 
 - **File**: `src/tests/load/k6/scenarios/admin.js`
-- **Auth**: A `super_admin` session. Sign-in grants that role only to an email on `GLOBAL_ADMIN_EMAILS`; `pnpm tool:admin-token` signs in as one (see below).
+- **Auth**: A `super_admin` session. Sign-in grants that role only to an email on `GLOBAL_ADMIN_EMAILS` whose account has an enrolled MFA factor, and only a session that proved the second factor may use it (A-2); `pnpm tool:admin-token` signs in as one and completes the MFA step with a TOTP code (see below).
 - **Env**: `ADMIN_TOKEN` (required)
 - **Run**: `pnpm load:admin` with `ADMIN_TOKEN`, or `ADMIN_TOKEN=<token> k6 run src/tests/load/k6/scenarios/admin.js`. Obtain token via: `pnpm tool:admin-token` (see below).
 
@@ -439,7 +439,7 @@ CI runs a subset in the **organization-scoped routes** job step (see `scheduled-
 
 - **TEST_TOKEN and TEST_ORG_ID**: Run `pnpm tool:load-test-credentials` (with server up and full seed). It logs in as the demo user, lists organizations, and prints `TEST_TOKEN` and `TEST_ORG_ID` for copy-paste.
 - **Credential pool**: Run `pnpm db:seed:loadtest` (bulk seed + pool export). The generator **excludes MFA accounts** — both `users.is_mfa_enabled` and membership of an organization whose `security_policy.mfa_required` is true, mirroring the login gate in `completeFirstFactorAuth`. Such an account returns HTTP 200 with an `mfa_required` envelope instead of an `access_token`, so a VU drawing one would read no token and quietly abandon its journey. The bulk seeder sets `mfa_required` on a share of its organizations, so without the filter roughly a third of the pool is unusable.
-- **ADMIN_TOKEN**: Create the account once with `DEMO_EMAIL=<admin email> pnpm db:seed:demo-admin` (it takes `DEMO_PASSWORD`) and put the email on `GLOBAL_ADMIN_EMAILS`. Then, with the server up, run `pnpm tool:admin-token`. It signs in as `ADMIN_EMAIL` (default: the first `GLOBAL_ADMIN_EMAILS` entry) with `ADMIN_PASSWORD` (default: `DEMO_PASSWORD`) and prints the access token, refusing unless the role is `super_admin`. The token belongs to a real session: the auth middleware refuses a token whose session does not exist, which is why the self-signed token this tool used to print failed every admin request. It lives `GLOBAL_ADMIN_ACCESS_TOKEN_EXPIRY_SECONDS` (default 5 minutes).
+- **ADMIN_TOKEN**: Put the email on `GLOBAL_ADMIN_EMAILS`, then create the account once with `DEMO_EMAIL=<admin email> pnpm db:seed:demo-admin` (it takes `DEMO_PASSWORD`, and for a platform-admin address enrolls a TOTP factor with `DEMO_TOTP_SECRET`, default the local demo secret in `tooling/dev/demo-admin-totp.ts`). Then, with the server up, run `pnpm tool:admin-token`. It signs in as `ADMIN_EMAIL` (default: the first `GLOBAL_ADMIN_EMAILS` entry) with `ADMIN_PASSWORD` (default: `DEMO_PASSWORD`), completes `POST /auth/mfa/login` with a TOTP code from `ADMIN_TOTP_SECRET` (default: `DEMO_TOTP_SECRET`, else the local secret) — a super_admin needs an MFA-verified session (A-2) — and prints the access token, refusing unless the role is `super_admin`. The nightly job sets `DEMO_TOTP_SECRET` in its env. The token belongs to a real session: the auth middleware refuses a token whose session does not exist, which is why the self-signed token this tool used to print failed every admin request. It lives `GLOBAL_ADMIN_ACCESS_TOKEN_EXPIRY_SECONDS` (default 5 minutes).
 
 ## Optional env (all scenarios)
 

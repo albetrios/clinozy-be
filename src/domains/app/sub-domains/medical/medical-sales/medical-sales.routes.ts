@@ -1,6 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT } from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
+import {
+  EXPORT_AUTHED_RATE_LIMIT,
+  ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+} from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
 import { requireOrganizationPermission } from '@/shared/utils/auth/authorization.util.js';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 import type { MedicalSalesService } from './medical-sales.service.js';
@@ -47,10 +50,10 @@ export function medicalSalesRoutes(service: MedicalSalesService): FastifyPluginA
       {
         onRequest: [app.authenticate],
         preHandler: [requireOrganizationPermission(APP_PERMISSIONS.MEDICINE_EXPORT)],
-        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        ...EXPORT_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Export medical sales',
-          description: `The sales CSV (\`medical-sales-YYYY-MM-DD.csv\`, up to 5,000 rows — \`is_truncated\` when more matched), with the list's filters and sort. ${LIST_QUERY_TEXT} Requires medicine:export and medicine:read.`,
+          description: `The sales CSV (\`medical-sales-YYYY-MM-DD.csv\`, up to 5,000 rows — \`is_truncated\` when more matched), with the list's filters and sort. ${LIST_QUERY_TEXT} Each download is audited (who, the filters, the row count); at most 5 per 5 minutes per member and 2 at a time per clinic, else a 429 with Retry-After (B1-3, D-4). Requires medicine:export and medicine:read.`,
           tags: ['Medical store'],
           querystring: listMedicalSalesQueryDto,
         },
@@ -114,7 +117,7 @@ export function medicalSalesRoutes(service: MedicalSalesService): FastifyPluginA
         schema: {
           summary: 'Void a medical sale',
           description:
-            "Voids a sale with nothing paid and nothing returned — something paid (or credited) is a 409 `sale_has_payments`, a return a 409 `sale_has_returns` — with why: `reason` (billed_by_mistake, wrong_items, customer_changed_mind, other) and a `note`, required for other. Each line goes back into its batch and the invoice is deleted. Undo with restore until the organization's purge window ends. Requires medicine:delete.",
+            'Voids a sale with nothing paid and nothing returned — something paid (or credited) is a 409 `sale_has_payments`, a return a 409 `sale_has_returns` — with why: `reason` (billed_by_mistake, wrong_items, customer_changed_mind, other) and a `note`, required for other. Each line goes back into its batch and the invoice is deleted. Undo with restore at any time — a financial record is never purged (G2-4). Requires medicine:delete.',
           tags: ['Medical store'],
           params: medicalSalesIdParamsDto,
           querystring: voidMedicalSaleQueryDto,

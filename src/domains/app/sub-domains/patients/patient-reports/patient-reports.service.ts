@@ -1,4 +1,5 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
+import { UPLOAD_RECORD_RESOURCE } from '@/domains/app/base-record.types.js';
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import type { PatientReportsRepository } from './patient-reports.repository.js';
@@ -27,6 +28,8 @@ export class PatientReportsService extends BaseRecordService<PatientReportOutput
   constructor(organizationService: OrganizationService, repository: PatientReportsRepository) {
     super(organizationService, {
       label: 'Patient report',
+      // C-2: the upload keys the record holds — each bound to it on its first attach
+      uploadFields: [{ field: 'file_keys', resource: UPLOAD_RECORD_RESOURCE.PATIENT_REPORT }],
       repository,
       parseCreate: validateCreatePatientReport,
       parseUpdate: validateUpdatePatientReport,

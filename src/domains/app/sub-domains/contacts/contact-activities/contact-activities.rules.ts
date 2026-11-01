@@ -11,6 +11,7 @@ import { ContactsRepository } from '@/domains/app/sub-domains/contacts/contacts.
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { ContactMessageTemplatesRepository } from '@/domains/app/sub-domains/contacts/contact-message-templates/contact-message-templates.repository.js';
 import { LEAD_INTEREST_LABELS } from '@/domains/app/sub-domains/leads/leads.constants.js';
+import { PATIENT_MEDICAL_DETAIL_READERS } from '@/domains/app/sub-domains/patients/patients.constants.js';
 import { LeadsRepository } from '@/domains/app/sub-domains/leads/leads.repository.js';
 import { requestTaskRulesRun } from '@/domains/app/sub-domains/tasks/queues/task-rules.queue.js';
 import { runEnqueueAfterCommit } from '@/core/events/event-bus.js';
@@ -27,21 +28,41 @@ import {
 import type { ContactActivitiesRepository } from './contact-activities.repository.js';
 import { validateContactMessageBatch } from './contact-activities.validator.js';
 
-/** The read gate of each record link today (M10, D63) — an entry linked to one the caller cannot read is hidden. */
-const LINK_READ_PERMISSIONS: Readonly<Record<ContactActivityLinkColumn, string>> = {
+/**
+ * The read gate of each record link today (M10, D63) — an entry linked to one the caller cannot
+ * read is hidden; a list means any one of its codes (a check-in's entry carries how the patient is
+ * doing — the medical-detail readers only, B1-1).
+ */
+const LINK_READ_PERMISSIONS: Readonly<
+  Record<ContactActivityLinkColumn, string | readonly string[]>
+> = {
   appointment_id: APP_PERMISSIONS.APPOINTMENT_READ,
   invoice_id: APP_PERMISSIONS.PAYMENT_READ,
   payment_id: APP_PERMISSIONS.PAYMENT_READ,
   patient_prescription_id: APP_PERMISSIONS.PATIENT_PRESCRIPTION_READ,
   patient_offering_id: APP_PERMISSIONS.PATIENT_READ,
   patient_review_id: APP_PERMISSIONS.PATIENT_READ,
-  patient_check_in_id: APP_PERMISSIONS.PATIENT_READ,
+  patient_check_in_id: PATIENT_MEDICAL_DETAIL_READERS,
   task_id: APP_PERMISSIONS.TASK_READ,
   patient_treatment_id: APP_PERMISSIONS.PATIENT_TREATMENT_READ,
   patient_clinical_note_id: APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
   patient_image_id: APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
   patient_report_id: APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
 };
+
+/** Whether the caller holds the code, or any one of a list. */
+async function canAny({
+  can,
+  codes,
+}: {
+  can: (code: string) => Promise<boolean>;
+  codes: string | readonly string[];
+}): Promise<boolean> {
+  for (const code of typeof codes === 'string' ? [codes] : codes) {
+    if (await can(code)) return true;
+  }
+  return false;
+}
 
 /** The channel a sent entry leaves on its contact (CT4, D65): its own type, or `call` for a call. */
 function channelOf(type: string): string | null {
@@ -223,8 +244,8 @@ export function createContactActivitiesRules(
   return {
     readScope: async (can) => {
       const scope: Record<string, readonly unknown[]> = {};
-      for (const [column, code] of Object.entries(LINK_READ_PERMISSIONS)) {
-        if (!(await can(code))) scope[column] = [null];
+      for (const [column, codes] of Object.entries(LINK_READ_PERMISSIONS)) {
+        if (!(await canAny({ can, codes }))) scope[column] = [null];
       }
       // A private-album photo's entry (P23, PC16)
       if (!(await can(APP_PERMISSIONS.PATIENT_PRIVATE_ALBUM_READ)))

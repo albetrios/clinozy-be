@@ -1827,6 +1827,7 @@ Table auth.auth_methods {
   created_at timestamptz [not null]
   created_by_user_id bigint
   encrypted_secret text
+  enrolled_on_session_public_id varchar(28)
   id bigint [pk, increment, not null]
   is_primary boolean [not null]
   last_used_at timestamptz
@@ -1834,6 +1835,7 @@ Table auth.auth_methods {
   phone_number varchar(20)
   provider varchar(50)
   provider_user_id varchar(255)
+  provisional_until timestamptz
   public_id varchar(28) [not null]
   revoked_at timestamptz
   user_id bigint [not null]
@@ -2402,6 +2404,8 @@ Note tenancy.roles {
 }
 
 Table upload.uploads {
+  bound_public_id varchar(28)
+  bound_resource varchar(40)
   bucket varchar(100) [not null]
   created_at timestamptz [not null]
   created_by_user_id bigint

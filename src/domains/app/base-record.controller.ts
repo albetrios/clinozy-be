@@ -14,7 +14,9 @@ import {
   listBodyFieldNames,
   recordScopedAuditEvent,
 } from '@/shared/utils/infrastructure/audit-request-context.util.js';
+import { requireStrongRecentStepUpPreHandler } from '@/shared/middlewares/core/recent-step-up.middleware.js';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
+import { withOrganizationExportSlot } from '@/domains/app/app-export-gate.js';
 import type { BaseRecordService } from './base-record.service.js';
 import type { BaseRecordExportOutput, BaseRecordVisibility } from './base-record.types.js';
 import { toCsv } from '@/shared/utils/text/csv.util.js';
@@ -36,6 +38,62 @@ async function holdsAnyPermission({
     if (await hasOrganizationPermission({ request, permissionCode: code })) return true;
   }
   return false;
+}
+
+/** The longest filter value an audit row keeps (a list's or an export's query, B1-3). */
+const AUDIT_FILTER_VALUE_MAX = 200;
+
+/**
+ * A list query as an audit row records it (B1-3, G2-3): the filters, never the paging, and the
+ * free-text search only as `has_search` — a name typed into `q` is patient data.
+ */
+function auditFilters(query: unknown): Record<string, string | boolean> {
+  const { after: _after, limit: _limit, q, ...filters } = (query ?? {}) as Record<string, unknown>;
+  // A Map, then own properties: a caller-chosen key such as `__proto__` is stored as a plain
+  // entry and never written through an object's prototype setter.
+  const recorded = new Map<string, string | boolean>();
+  for (const [name, value] of Object.entries(filters)) {
+    const text = auditFilterText(value);
+    if (text !== undefined) recorded.set(name, text);
+  }
+  if (q !== undefined && q !== '') recorded.set('has_search', true);
+  return Object.fromEntries(recorded);
+}
+
+/**
+ * A filter value as the audit row keeps it (cut to {@link AUDIT_FILTER_VALUE_MAX}): text as is,
+ * numbers and flags as their text, a list as its scalars joined with commas; anything else is dropped.
+ */
+function auditFilterText(value: unknown): string | undefined {
+  if (typeof value === 'string') return value.slice(0, AUDIT_FILTER_VALUE_MAX);
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return value.toString().slice(0, AUDIT_FILTER_VALUE_MAX);
+  }
+  if (Array.isArray(value)) {
+    const scalars = value.filter(
+      (entry): entry is string | number | boolean =>
+        typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean',
+    );
+    return scalars
+      .map((entry) => entry.toString())
+      .join(',')
+      .slice(0, AUDIT_FILTER_VALUE_MAX);
+  }
+  return undefined;
+}
+
+/** How many signed file links a read handed out (`file_url`, and each of `files[].file_url`). */
+function countFileLinks(items: readonly unknown[]): number {
+  let count = 0;
+  for (const item of items) {
+    const record = item as Record<string, unknown>;
+    if (typeof record.file_url === 'string') count += 1;
+    if (!Array.isArray(record.files)) continue;
+    for (const file of record.files as Record<string, unknown>[]) {
+      if (typeof file.file_url === 'string') count += 1;
+    }
+  }
+  return count;
 }
 
 /** Where a table's routes take their ids from, and how its audit rows are named. */
@@ -63,6 +121,17 @@ export interface BaseRecordControllerOptions {
    * another screen (the medical store's payments, MD22, and their CSV, MD31).
    */
   listDerived?: Readonly<Record<string, unknown>>;
+  /**
+   * Reads are audited too (G2-3) — a clinical record's: each list page an `app.<resource>.list` row
+   * (its count, filters and the signed file links it handed out), each record an
+   * `app.<resource>.read` row. Never the rows themselves.
+   */
+  auditReads?: boolean;
+  /**
+   * {@link hiddenFields} whose cells, when the caller may see them, make an export need a strong
+   * step-up on the session (B1-3 — a patient list with its medical details).
+   */
+  exportStepUpFields?: readonly string[];
 }
 
 /**
@@ -151,6 +220,15 @@ export class BaseRecordController<Output extends { id: string }> {
     request: FastifyRequest;
     output: Item;
   }): Promise<Item> {
+    const hidden = await this.hiddenFieldsOf(request);
+    if (hidden.length === 0) return output;
+    const blank = (item: Output) =>
+      ({ ...item, ...Object.fromEntries(hidden.map((field) => [field, null])) }) as Output;
+    return (Array.isArray(output) ? output.map(blank) : blank(output as Output)) as Item;
+  }
+
+  /** The output fields the caller may not see, per {@link BaseRecordControllerOptions.hiddenFields}. */
+  private async hiddenFieldsOf(request: FastifyRequest): Promise<string[]> {
     const hidden: string[] = [];
     for (const [field, codes] of Object.entries(this.options.hiddenFields ?? {})) {
       if (
@@ -159,10 +237,85 @@ export class BaseRecordController<Output extends { id: string }> {
         hidden.push(field);
       }
     }
-    if (hidden.length === 0) return output;
-    const blank = (item: Output) =>
-      ({ ...item, ...Object.fromEntries(hidden.map((field) => [field, null])) }) as Output;
-    return (Array.isArray(output) ? output.map(blank) : blank(output as Output)) as Item;
+    return hidden;
+  }
+
+  /** Records a read of a clinical table (G2-3) — best effort, like every read's audit. */
+  private async auditRead({
+    request,
+    verb,
+    metadata,
+  }: {
+    request: FastifyRequest;
+    verb: 'list' | 'read';
+    metadata: Record<string, unknown>;
+  }): Promise<void> {
+    if (!this.options.auditReads) return;
+    await recordScopedAuditEvent({
+      request,
+      input: {
+        ...buildAuditActorFields(requirePrincipal(request)),
+        action: `app.${this.options.resource}.${verb}`,
+        resource_type: this.options.resource,
+        organizationPublicId: requireOrganizationScope(request).organizationPublicId,
+        metadata,
+      },
+    });
+  }
+
+  /**
+   * Records an export (B1-3): who, the filters, how many rows and whether the medical cells were in
+   * it — never the rows. Fail-closed: no audit row, no file.
+   */
+  private async auditExport({
+    request,
+    rowCount,
+    isTruncated,
+    extra = {},
+  }: {
+    request: FastifyRequest;
+    rowCount: number;
+    isTruncated: boolean;
+    extra?: Record<string, unknown>;
+  }): Promise<void> {
+    await recordScopedAuditEvent({
+      request,
+      failClosed: true,
+      input: {
+        ...buildAuditActorFields(requirePrincipal(request)),
+        action: `app.${this.options.resource}.export`,
+        resource_type: this.options.resource,
+        organizationPublicId: requireOrganizationScope(request).organizationPublicId,
+        metadata: {
+          row_count: rowCount,
+          is_truncated: isTruncated,
+          filters: auditFilters(request.query),
+          ...extra,
+        },
+      },
+    });
+  }
+
+  /**
+   * B1-3: an export that carries cells of {@link BaseRecordControllerOptions.exportStepUpFields}
+   * needs a strong step-up (password or MFA) on this session — an API key never has one.
+   */
+  private async assertExportStepUp({
+    request,
+    reply,
+    hidden,
+  }: {
+    request: FastifyRequest;
+    reply: FastifyReply;
+    hidden: readonly string[];
+  }): Promise<boolean> {
+    const fields = this.options.exportStepUpFields ?? [];
+    if (!fields.some((field) => !hidden.includes(field))) return false;
+    if (request.auth?.kind !== 'user') {
+      throw new ForbiddenError('errors:strongStepUpRequired');
+    }
+    await requireStrongRecentStepUpPreHandler(request, reply);
+    return true;
   }
 
   /** Refuses a body naming a field the caller may not set (403), per `guardedFields`. */
@@ -195,8 +348,19 @@ export class BaseRecordController<Output extends { id: string }> {
         ...(this.options.listDerived ? { derived: this.options.listDerived } : {}),
       },
     });
+    const items = await this.present({ request, output: page.items });
+    await this.auditRead({
+      request,
+      verb: 'list',
+      metadata: {
+        row_count: items.length,
+        filters: auditFilters(request.query),
+        parent_public_id: this.readParentId(request) ?? null,
+        file_links_issued: countFileLinks(items),
+      },
+    });
     return paginatedResponse({
-      data: await this.present({ request, output: page.items }),
+      data: items,
       request_id: getRequestIdentifier(request),
       pagination: {
         per_page: page.limit,
@@ -210,17 +374,24 @@ export class BaseRecordController<Output extends { id: string }> {
 
   /** `GET …/{id}` — one live record. */
   readonly get = async (request: FastifyRequest, _reply: FastifyReply) => {
+    const publicId = this.readId(request);
     const data = await this.service.get({
       scope: requireOrganizationScope(request),
-      publicId: this.readId(request),
+      publicId,
       actingUserPublicId: this.actor(request),
       visibility: await this.visibility(request),
       parentPublicId: this.readParentId(request),
     });
-    return successResponse({
-      data: await this.present({ request, output: data }),
-      request_id: getRequestIdentifier(request),
+    const presented = await this.present({ request, output: data });
+    await this.auditRead({
+      request,
+      verb: 'read',
+      metadata: {
+        [`${this.options.resource}_public_id`]: publicId,
+        file_links_issued: countFileLinks([presented]),
+      },
     });
+    return successResponse({ data: presented, request_id: getRequestIdentifier(request) });
   };
 
   /** `POST` — creates a record (under the parent when nested). */
@@ -375,8 +546,12 @@ export class BaseRecordController<Output extends { id: string }> {
       return successResponse({ data, request_id: getRequestIdentifier(request) });
     };
 
-  /** `GET …/exports` — the list as a CSV download (D18 "Export lists"), same filters as the list. */
-  readonly export = async (request: FastifyRequest, _reply: FastifyReply) => {
+  /**
+   * `GET …/exports` — the list as a CSV download (D18 "Export lists"), same filters as the list:
+   * a strong step-up when it carries the medical cells, one of the organization's export slots
+   * (D-4) and an `app.<resource>.export` audit row before the file goes out (B1-3).
+   */
+  readonly export = async (request: FastifyRequest, reply: FastifyReply) => {
     const { readPermission } = this.options;
     if (
       readPermission &&
@@ -384,16 +559,30 @@ export class BaseRecordController<Output extends { id: string }> {
     ) {
       throw new ForbiddenError('errors:forbidden').withReason(MISSING_PERMISSION_REASON);
     }
-    const { rows, is_truncated } = await this.service.exportRows({
-      scope: requireOrganizationScope(request),
-      query: request.query,
-      options: {
-        actingUserPublicId: this.actor(request),
-        visibility: await this.visibility(request),
-        ...(this.options.listDerived ? { derived: this.options.listDerived } : {}),
-      },
+    const hidden = await this.hiddenFieldsOf(request);
+    const medicalColumns = await this.assertExportStepUp({ request, reply, hidden });
+    const scope = requireOrganizationScope(request);
+    const visibility = await this.visibility(request);
+    const { rows, is_truncated } = await withOrganizationExportSlot({
+      organizationPublicId: scope.organizationPublicId,
+      build: () =>
+        this.service.exportRows({
+          scope,
+          query: request.query,
+          options: {
+            actingUserPublicId: this.actor(request),
+            visibility,
+            ...(this.options.listDerived ? { derived: this.options.listDerived } : {}),
+          },
+        }),
     });
     const presented = await this.present({ request, output: rows });
+    await this.auditExport({
+      request,
+      rowCount: presented.length,
+      isTruncated: is_truncated,
+      extra: { medical_columns: medicalColumns },
+    });
     const data: BaseRecordExportOutput = {
       file_name: `${this.options.exportName ?? this.options.resource}-${new Date().toISOString().slice(0, 10)}.csv`,
       content_type: 'text/csv',
@@ -403,6 +592,35 @@ export class BaseRecordController<Output extends { id: string }> {
     };
     return successResponse({ data, request_id: getRequestIdentifier(request) });
   };
+
+  /**
+   * `GET /<module>/<name>/exports` — a collection view that answers an export envelope (a month's
+   * purchase GST summary): built in one of the organization's export slots (D-4) and audited as
+   * an `app.<resource>.export` naming the view (B1-3).
+   */
+  readonly collectionExport =
+    (name: string) => async (request: FastifyRequest, _reply: FastifyReply) => {
+      const scope = requireOrganizationScope(request);
+      const visibility = await this.visibility(request);
+      const data = (await withOrganizationExportSlot({
+        organizationPublicId: scope.organizationPublicId,
+        build: () =>
+          this.service.collection({
+            scope,
+            kind: 'view',
+            name,
+            input: request.query,
+            options: { actingUserPublicId: this.actor(request), visibility },
+          }),
+      })) as BaseRecordExportOutput;
+      await this.auditExport({
+        request,
+        rowCount: data.row_count,
+        isTruncated: data.is_truncated,
+        extra: { view: name },
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
+    };
 
   /** The handler of one lifecycle action route (`POST …/{id}/<action>`). */
   readonly transition =

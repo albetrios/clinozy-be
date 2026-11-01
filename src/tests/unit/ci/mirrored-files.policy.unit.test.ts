@@ -22,6 +22,14 @@ const COPIES = [
   'tooling/setup/agent/stack-lock.lib.sh',
   'tooling/setup/agent/start-sonarqube.sh',
   'tooling/ci/early-failure-alert.d.mts',
+  // This repository's CI actions, which clinozy-fe copies rather than using them as
+  // `<owner>/<this repository>/...@<sha>`: the runner downloads that whole repository, and its
+  // tracked `.mcp.json` and `.cursor/mcp.json` link to a gitignored file, so the download stops at
+  // "Could not find file" before any step. .gitleaksignore lists test-env's fake keypair.
+  '.github/actions/ci-failure-issue/action.yml',
+  '.github/actions/ci-failure-issue/ci-failure-issue.sh',
+  '.github/actions/ci-failure-issue/fix-plan.mjs',
+  '.github/actions/test-env/action.yml',
 ] as const;
 
 /** A file's text with the repository names folded together, so "the other one" reads the same. */

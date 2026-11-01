@@ -2,11 +2,23 @@ import Fastify from 'fastify';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { rateLimitPlugin } = vi.hoisted(() => ({
-  rateLimitPlugin: vi.fn().mockResolvedValue(undefined),
-}));
+const { rateLimitPlugin, globalRateLimitHandler } = vi.hoisted(() => {
+  const handler = vi.fn(async () => undefined);
+  // Stands in for the fp()-wrapped plugin: decorates the root app (skip-override) with the
+  // limiter factories the middleware builds its hooks from.
+  const plugin = vi.fn(
+    async (instance: { decorate: (name: string, value: unknown) => void }, _options: unknown) => {
+      instance.decorate('rateLimit', () => handler);
+      instance.decorate('createRateLimit', () => async () => ({ isAllowed: true, key: 'k' }));
+    },
+  );
+  Object.assign(plugin, { [Symbol.for('skip-override')]: true });
+  return { rateLimitPlugin: plugin, globalRateLimitHandler: handler };
+});
 
-vi.mock('@fastify/rate-limit', () => ({
+vi.mock('@fastify/rate-limit', async (importOriginal) => ({
+  // The real `normalizeIP` — `rateLimitIpKey` delegates to it (D-3).
+  normalizeIP: (await importOriginal<typeof import('@fastify/rate-limit')>()).normalizeIP,
   default: rateLimitPlugin,
 }));
 
@@ -85,7 +97,9 @@ describe('rate-limit.middleware', () => {
       skipOnError: boolean;
       allowList: (request: { url: string }) => boolean;
     };
-    expect(options.global).toBe(true);
+    // D-2: not the plugin's per-route global mode, which ran after `authenticate` and never on
+    // the not-found handler — the global limit is the middleware's own app-level onRequest hook.
+    expect(options.global).toBe(false);
     // Global cap is a fixed per-IP number; organization/user quotas live in post-auth presets.
     expect(options.max).toBe(100);
     expect(options.timeWindow).toBe(60_000);
@@ -287,6 +301,18 @@ describe('rate-limit.middleware', () => {
       expect(options.keyGenerator({ organizationId: '', ip: '1.2.3.4' })).toBe('1.2.3.4');
     });
 
+    it('keys an IPv6 caller on its /64, so rotating the low bits mints no new bucket (D-3)', async () => {
+      application = Fastify();
+      await application.register(rateLimitMiddleware);
+      await application.ready();
+      const options = rateLimitPlugin.mock.calls.at(-1)![1] as {
+        keyGenerator: (request: { ip: string }) => string;
+      };
+      expect(options.keyGenerator({ ip: '2001:db8:1:2::1' })).toBe('2001:db8:1:2::');
+      expect(options.keyGenerator({ ip: '2001:db8:1:2:ffff::9' })).toBe('2001:db8:1:2::');
+      expect(options.keyGenerator({ ip: '::ffff:1.2.3.4' })).toBe('1.2.3.4');
+    });
+
     it('allowList exact-matches the liveness/readiness probe paths and rejects prefix collisions', async () => {
       application = Fastify();
       await application.register(rateLimitMiddleware);
@@ -311,6 +337,58 @@ describe('rate-limit.middleware', () => {
       expect(options.allowList({ url: testApiPath('/health-tracker') })).toBe(false);
       expect(options.allowList({ url: '/foo/health/bar' })).toBe(false);
       expect(options.allowList({ url: testApiPath('/auth/login') })).toBe(false);
+    });
+  });
+
+  // D-2: the global limit runs as an app-level onRequest hook — before a route's own
+  // `onRequest: [authenticate]` and on unknown URLs — and a route's own preset replaces it.
+  describe('global limiter hook', () => {
+    it('runs before the route-level onRequest hooks and on the not-found handler', async () => {
+      const order: string[] = [];
+      globalRateLimitHandler.mockImplementation(async () => {
+        order.push('global-rate-limit');
+      });
+      application = Fastify();
+      await application.register(rateLimitMiddleware);
+      application.get(
+        '/protected',
+        {
+          onRequest: [
+            async () => {
+              order.push('authenticate');
+            },
+          ],
+        },
+        async () => ({ ok: true }),
+      );
+      await application.ready();
+
+      await application.inject({ method: 'GET', url: '/protected' });
+      expect(order).toEqual(['global-rate-limit', 'authenticate']);
+
+      order.length = 0;
+      const notFound = await application.inject({ method: 'GET', url: '/no-such-route' });
+      expect(notFound.statusCode).toBe(404);
+      expect(order).toEqual(['global-rate-limit']);
+    });
+
+    it('leaves a route with its own rate-limit config (or none) to that config', async () => {
+      application = Fastify();
+      await application.register(rateLimitMiddleware);
+      application.get('/preset', { config: { rateLimit: { max: 5 } } }, async () => ({ ok: true }));
+      application.get('/opted-out', { config: { rateLimit: false } }, async () => ({ ok: true }));
+      await application.ready();
+
+      await application.inject({ method: 'GET', url: '/preset' });
+      await application.inject({ method: 'GET', url: '/opted-out' });
+      expect(globalRateLimitHandler).not.toHaveBeenCalled();
+    });
+
+    it('decorates the failed-authentication limiter the auth middleware uses', async () => {
+      application = Fastify();
+      await application.register(rateLimitMiddleware);
+      await application.ready();
+      expect(application.failedAuthenticationRateLimit).toBeTypeOf('function');
     });
   });
 });

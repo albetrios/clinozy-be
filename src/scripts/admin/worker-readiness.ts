@@ -79,8 +79,11 @@ function findStaleQueues({
 }
 
 async function fetchWorkerHealth(baseUrl: string): Promise<WorkerHealthPayload> {
+  // The worker's /readyz carries the queue heartbeats only for the metrics scrape token.
+  const scrapeToken = process.env.METRICS_SCRAPE_TOKEN;
   const response = await fetch(`${baseUrl.replace(/\/$/, '')}/readyz`, {
     signal: AbortSignal.timeout(HTTP_FETCH_TIMEOUT_MS),
+    headers: scrapeToken ? { authorization: `Bearer ${scrapeToken}` } : {},
   });
   if (!response.ok) {
     throw new Error(`Worker health returned HTTP ${String(response.status)}`);

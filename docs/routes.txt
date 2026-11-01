@@ -204,20 +204,20 @@ Legend:
   POST   /api/v1/app/patients/:patient_id/check-ins               200  req  both  PERM: patient:update
   GET    /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id  200  -    both  PERM: patient:read
   PATCH  /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id  200  -    both  PERM: patient:update
-  DELETE /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id  204  -    both  PERM: patient:update
+  DELETE /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id  204  -    both  PERM: patient:update + patient:delete
   POST   /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id/actions  200  req  both  PERM: patient:update
-  POST   /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id/restore  200  req  both  PERM: patient:update
+  POST   /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id/restore  200  req  both  PERM: patient:update + patient:delete
   GET    /api/v1/app/patients/:patient_id/clinical-notes          200  -    both  PERM: patient:clinical_record:read
   POST   /api/v1/app/patients/:patient_id/clinical-notes          200  req  both  PERM: patient:update + patient:clinical_record:read
   GET    /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id  200  -    both  PERM: patient:clinical_record:read
-  DELETE /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id  204  -    both  PERM: patient:update + patient:clinical_record:read
-  POST   /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id/restore  200  req  both  PERM: patient:update + patient:clinical_record:read
+  DELETE /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id  204  -    both  PERM: patient:update + patient:clinical_record:read + patient:delete
+  POST   /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id/restore  200  req  both  PERM: patient:update + patient:clinical_record:read + patient:delete
   GET    /api/v1/app/patients/:patient_id/images                  200  -    both  PERM: patient:clinical_record:read
   POST   /api/v1/app/patients/:patient_id/images                  200  req  both  PERM: patient:update + patient:clinical_record:read
   GET    /api/v1/app/patients/:patient_id/images/:patient_image_id  200  -    both  PERM: patient:clinical_record:read
   PATCH  /api/v1/app/patients/:patient_id/images/:patient_image_id  200  -    both  PERM: patient:update + patient:clinical_record:read
-  DELETE /api/v1/app/patients/:patient_id/images/:patient_image_id  204  -    both  PERM: patient:update + patient:clinical_record:read
-  POST   /api/v1/app/patients/:patient_id/images/:patient_image_id/restore  200  req  both  PERM: patient:update + patient:clinical_record:read
+  DELETE /api/v1/app/patients/:patient_id/images/:patient_image_id  204  -    both  PERM: patient:update + patient:clinical_record:read + patient:delete
+  POST   /api/v1/app/patients/:patient_id/images/:patient_image_id/restore  200  req  both  PERM: patient:update + patient:clinical_record:read + patient:delete
   GET    /api/v1/app/patients/:patient_id/offering-ideas          200  -    both  PERM: patient:read
   GET    /api/v1/app/patients/:patient_id/offering-suggestions    200  -    both  PERM: patient:read
   POST   /api/v1/app/patients/:patient_id/offering-suggestions    200  req  both  PERM: patient:update
@@ -239,8 +239,8 @@ Legend:
   POST   /api/v1/app/patients/:patient_id/reports                 200  req  both  PERM: patient:update + patient:clinical_record:read
   GET    /api/v1/app/patients/:patient_id/reports/:patient_report_id  200  -    both  PERM: patient:clinical_record:read
   PATCH  /api/v1/app/patients/:patient_id/reports/:patient_report_id  200  -    both  PERM: patient:update + patient:clinical_record:read
-  DELETE /api/v1/app/patients/:patient_id/reports/:patient_report_id  204  -    both  PERM: patient:update + patient:clinical_record:read
-  POST   /api/v1/app/patients/:patient_id/reports/:patient_report_id/restore  200  req  both  PERM: patient:update + patient:clinical_record:read
+  DELETE /api/v1/app/patients/:patient_id/reports/:patient_report_id  204  -    both  PERM: patient:update + patient:clinical_record:read + patient:delete
+  POST   /api/v1/app/patients/:patient_id/reports/:patient_report_id/restore  200  req  both  PERM: patient:update + patient:clinical_record:read + patient:delete
   POST   /api/v1/app/patients/:patient_id/restore                 200  req  both  PERM: patient:delete
   GET    /api/v1/app/patients/:patient_id/reviews                 200  -    both  PERM: patient:read
   POST   /api/v1/app/patients/:patient_id/reviews                 200  req  both  PERM: patient_review:create

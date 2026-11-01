@@ -58,6 +58,12 @@ Each secret is `<random>~<mac>`: 32 random bytes plus an HMAC that binds them to
 - A secret the server **issued** that no longer rotates — its MAC verifies, or it is the session's stored previous secret — is a replay of a retired, possibly stolen secret. The user's whole session family is revoked (RFC 9700 reuse detection).
 - A secret the server **did not issue** proves nothing: anyone who learns a session id (a stolen bearer can list them) could invent one. It gets a plain `401` — no session is revoked and no token cache is touched. Destructive session actions stay behind the strong step-up of the explicit session-revocation routes.
 
+**Idle and absolute limits (E-2).** The server ends a session on its own: refresh revokes and
+refuses (401) a session not refreshed for `AUTH_SESSION_IDLE_TIMEOUT_SECONDS` (default 30 min;
+`error.reason` `idle_timeout`) or created `AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS` ago (default 12 h;
+`error.reason` `session_expired`). Both cookies are browser-session cookies (no `Max-Age`), so closing
+the browser drops them; there is no "remember this device" option.
+
 Implementation: `AuthSessionService.refreshSessionCredentials`; end-to-end coverage: `src/domains/auth/__tests__/integration/refresh-reuse-detection.integration.test.ts`.
 
 ---
@@ -147,7 +153,7 @@ the wire, through real routes:
 
 - **Cookies** — [`auth.integration.test.ts`](../../../src/domains/auth/__tests__/integration/auth.integration.test.ts)
   reads the login `Set-Cookie` headers: both cookies carry `Path=/api/v1/auth`, the configured
-  `SameSite`, the session `Max-Age` and `Secure` exactly when `COOKIE_SECURE` is on; `session_id`
+  `SameSite`, no `Max-Age`/`Expires` (browser-session cookies — E-2) and `Secure` exactly when `COOKIE_SECURE` is on; `session_id`
   is `HttpOnly` and `csrf_token` is not. The option builders have their own unit suite
   (`auth.http.util.unit.test.ts`).
 - **CORS** — [`cors.security.test.ts`](../../../src/tests/security/headers/cors.security.test.ts):

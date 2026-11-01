@@ -11,6 +11,7 @@
  * `.env.example` and pair it with a corresponding `.optional()` / refinement here.
  */
 import { createHash, createPrivateKey, createPublicKey } from 'node:crypto';
+import { isIP } from 'node:net';
 import { validateProductionRedisTopology } from '@/infrastructure/cache/redis-url.parse.util.js';
 import { type EnvVarSpec, envVar, toSchemaShape } from '@/shared/config/env-var-registry.js';
 import { PERMISSION_CACHE_RECOMPUTE_LOCK_TTL_SECONDS } from '@/shared/constants/ttl.constants.js';
@@ -96,10 +97,43 @@ const booleanString = (defaultValue: 'true' | 'false') =>
 
 const MAX_TRUST_PROXY_HOPS = 10;
 
-const trustProxyHopCountSchema = z
+/** The named ranges `proxy-addr` (Fastify's trust-proxy compiler) accepts besides addresses. */
+const TRUST_PROXY_NAMED_RANGES: ReadonlySet<string> = new Set([
+  'loopback',
+  'linklocal',
+  'uniquelocal',
+]);
+
+/** One trusted-proxy entry: an IPv4/IPv6 address, a CIDR (`/0`–`/32`, `/0`–`/128`), or a named range. */
+function isTrustProxyAddressEntry(entry: string): boolean {
+  if (TRUST_PROXY_NAMED_RANGES.has(entry)) return true;
+  const [address = '', prefix, extra] = entry.split('/');
+  if (extra !== undefined) return false;
+  const family = isIP(address);
+  if (family === 0) return false;
+  if (prefix === undefined) return true;
+  if (!/^\d{1,3}$/.test(prefix)) return false;
+  return Number(prefix) <= (family === 4 ? 32 : 128);
+}
+
+/**
+ * Whether a parsed `TRUST_PROXY` trusts every peer — an address list holding a `/0` CIDR, which
+ * is the bare `true` the schema refuses. Read by the Category-B refine.
+ */
+function trustProxyTrustsEveryAddress(trustProxy: false | number | readonly string[]): boolean {
+  return Array.isArray(trustProxy) && trustProxy.some((entry) => /\/0+$/.test(entry));
+}
+
+/**
+ * `TRUST_PROXY`: which reverse proxies Fastify trusts for `X-Forwarded-*` (D-6). One variable,
+ * two forms: a hop count (`1`–`10`, trust that many hops whatever their address) or a
+ * comma-separated address list (trust a hop only when the peer is in it — a client that reaches
+ * the app around the proxy cannot spoof its IP). Unset, `false` or `0` trusts nothing.
+ */
+const trustProxySchema = z
   .string()
   .optional()
-  .transform((value, context) => {
+  .transform((value, context): false | number | string[] => {
     const normalizedValue = value?.trim().toLowerCase();
     if (!normalizedValue || normalizedValue === 'false' || normalizedValue === '0') {
       return false;
@@ -110,10 +144,18 @@ const trustProxyHopCountSchema = z
       return hopCount;
     }
 
+    const entries = normalizedValue
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    if (entries.length > 0 && entries.every(isTrustProxyAddressEntry)) {
+      return entries;
+    }
+
     context.addIssue({
       code: 'custom',
       message:
-        'TRUST_PROXY must be false/0 or an integer proxy hop count from 1 to 10; do not use bare true',
+        'TRUST_PROXY must be false/0, an integer proxy hop count from 1 to 10, or a comma-separated list of proxy IPs/CIDRs (or loopback, linklocal, uniquelocal); do not use bare true',
     });
     return z.NEVER;
   });
@@ -159,10 +201,11 @@ const SERVER_VARS = {
     },
   }),
   TRUST_PROXY: envVar({
-    schema: trustProxyHopCountSchema,
+    schema: trustProxySchema,
     meta: {
-      allowed: 'false | 0, or integer 1–10',
-      description: 'Number of reverse-proxy hops Fastify may trust for X-Forwarded-* headers.',
+      allowed: 'false | 0, integer 1–10, or comma-separated IP/CIDR list',
+      description:
+        'Reverse proxies Fastify trusts for X-Forwarded-* headers: a hop count, or the proxy addresses (CIDR list).',
     },
   }),
   FASTIFY_KEEP_ALIVE_TIMEOUT_MS: envVar({
@@ -352,14 +395,29 @@ const envSchemaBase = z.object({
   GLOBAL_ADMIN_ACCESS_TOKEN_EXPIRY_SECONDS: z.coerce.number().int().min(60).max(3600).default(300),
 
   // Session
-  // sec-r4-C4: cap session lifetime at one year. Without an upper bound, an
-  // operator typo (`AUTH_SESSION_MAX_AGE_DAYS=3650`) or stale config could
-  // produce sessions that effectively never expire — extending the breach
-  // window after a credential compromise indefinitely. 365 is well clear of
-  // any realistic "stay signed in" UX (Slack / GitHub / GMail all rotate
-  // long-lived sessions inside this window) and bounds the worst-case impact
-  // of a stolen refresh token to a known interval.
-  AUTH_SESSION_MAX_AGE_DAYS: z.coerce.number().int().min(1).max(365).default(7),
+  /**
+   * Absolute session lifetime (seconds): a session expires this long after it was created, however
+   * active it is — `POST /auth/refresh` then answers 401 `session_expired` and revokes it, and the
+   * session row's `expires_at` is set to it at sign-in. Default 43200 (12 h, E-2).
+   *
+   * @remarks
+   * sec-r4-C4: bounded at one year so an operator typo cannot produce sessions that effectively
+   * never expire (the breach window of a stolen refresh token stays a known interval). The
+   * production-safe default is the short one; a longer value is a deliberate operator choice.
+   */
+  AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(300)
+    .max(31_536_000)
+    .default(43_200),
+  /**
+   * Idle session timeout (seconds): a session whose last refresh (`last_active_at`) is older than
+   * this is refused by `POST /auth/refresh` with 401 `idle_timeout` and revoked. Default 1800
+   * (30 min, E-2) — twice the 15-minute access-token lifetime, so an open tab that refreshes on
+   * schedule never trips it. Bounded at one day.
+   */
+  AUTH_SESSION_IDLE_TIMEOUT_SECONDS: z.coerce.number().int().min(60).max(86_400).default(1800),
   /** Secure flag for session + CSRF cookies. Set false only for plaintext local loops. */
   COOKIE_SECURE: booleanString('true'),
   /**
@@ -451,9 +509,23 @@ const envSchemaBase = z.object({
   /** Category-B. Fail boot when TRUST_PROXY is unset/false (behind a load balancer the client IP collapses). */
   TRUST_PROXY_REQUIRED: booleanString('true'),
   /**
+   * A-4: the hosted-deploy marker. `.github/workflows/reusable-railway-deploy.yml` sets it `true`
+   * for every Railway service it deploys (both environments) and for the runner steps that act on
+   * them; no env file, image or other workflow sets it — so CI runners (which run the image with
+   * TEST_MODE for clinozy-fe's e2e, the restore drills and k6) and developer machines keep `false`.
+   *
+   * @remarks
+   * When `true`, refines refuse every test-only switch — TEST_MODE, CAPTCHA_BYPASS_ALLOWED, the
+   * Turnstile requirement and its always-pass test secrets, RATE_LIMIT_RELAXED_CAPS,
+   * RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED, the invitation-token echo, the send-code cooldown switch
+   * and the committed CI JWT keypair (H-10) — on the hosted `development` deploy too, not only in
+   * production. It changes no runtime behaviour itself; runtime code never reads it.
+   */
+  HOSTED_DEPLOYMENT: booleanString('false'),
+  /**
    * Category-B. Marks a test run or a dev box — the master gate for test-only affordances: the
    * send-code `debug_verification_code` echo and the harness's DB/Redis wipe helpers. Defaults false;
-   * a refine forbids `true` in production; the test harness and `pnpm setup:local` (in `.env.local`)
+   * a refine forbids `true` in production and on any hosted deploy (`HOSTED_DEPLOYMENT`); the test harness and `pnpm setup:local` (in `.env.local`)
    * set it true. A test-only capability must additionally check `env.TEST_MODE`.
    */
   TEST_MODE: booleanString('false'),
@@ -976,12 +1048,14 @@ const envSchemaBase = z.object({
 
   // Data retention (days to keep audit logs / revoked sessions before cleanup)
   /**
-   * sec-U10: cap retention at 2 years and default to 1 year. The previous
-   * `min(1)` with no max + no default meant a typo (365 → 36500) silently
-   * disabled retention; once audit.logs is unbounded the table becomes the
-   * largest in the DB and trips autovacuum / search-path bloat thresholds.
+   * sec-U10: a bounded retention, default 1 year. The previous `min(1)` with no max + no default
+   * meant a typo (365 → 36500) silently disabled retention; once audit.logs is unbounded the table
+   * becomes the largest in the DB and trips autovacuum / search-path bloat thresholds. G2-3: the
+   * cap is 7 years (2557 days) — a clinic's record of who read or exported a patient's file may
+   * have to outlive the 6-year medical-record retention; the daily S3 export is the archive either
+   * way (docs/reference/security/audit-export.md).
    */
-  AUDIT_RETENTION_DAYS: z.coerce.number().int().min(1).max(730).default(365),
+  AUDIT_RETENTION_DAYS: z.coerce.number().int().min(1).max(2557).default(365),
   /**
    * audit-#14: every retention knob carries a defensible MAX as well as a min. Without an
    * upper bound a deployment typo (e.g. `90` → `90000`) silently disables cleanup, so the
@@ -1341,6 +1415,15 @@ function isValidProductionWebauthnRelyingPartyId(data: {
 }
 
 /**
+ * A-4: where test-only switches are refused — the production target, or any hosted deploy (the
+ * `HOSTED_DEPLOYMENT` marker the Railway deploy sets, which covers the hosted `development`
+ * environment too). Local machines and CI runners carry neither.
+ */
+function refusesTestSwitches(data: { NODE_ENV: string; HOSTED_DEPLOYMENT: boolean }): boolean {
+  return data.NODE_ENV === 'production' || data.HOSTED_DEPLOYMENT;
+}
+
+/**
  * Process environment Zod schema. Refines `envSchemaBase` with cross-field invariants
  * (idempotency threshold ordering, METRICS_ENABLED → token, CAPTCHA configuration,
  * production Turnstile requirement, Redis topology, FRONTEND_URL protocol, the settings
@@ -1394,26 +1477,25 @@ export const envSchema = envSchemaBase
   )
   .refine(
     (data) => {
-      if (data.NODE_ENV !== 'production') {
+      if (!refusesTestSwitches(data)) {
         return true;
       }
       return data.CAPTCHA_PROVIDER === 'turnstile' && Boolean(data.CAPTCHA_SECRET);
     },
     {
       message:
-        'In production, CAPTCHA_PROVIDER=turnstile and CAPTCHA_SECRET are required on public auth routes',
+        'In production and on every hosted deploy (HOSTED_DEPLOYMENT=true), CAPTCHA_PROVIDER=turnstile and CAPTCHA_SECRET are required on public auth routes',
       path: ['CAPTCHA_PROVIDER'],
     },
   )
   .refine(
     (data) =>
-      data.NODE_ENV !== 'production' ||
-      !TURNSTILE_TEST_SECRET_PATTERN.test(data.CAPTCHA_SECRET ?? ''),
+      !(refusesTestSwitches(data) && TURNSTILE_TEST_SECRET_PATTERN.test(data.CAPTCHA_SECRET ?? '')),
     {
       // A Cloudflare test secret passes (or fails) every token and skips the verifier's hostname
       // pin — local CAPTCHA only (`pnpm setup:local --with-captcha`), never a deployed backend.
       message:
-        'In production, CAPTCHA_SECRET must be a real Turnstile secret, not a Cloudflare test secret',
+        'In production and on every hosted deploy (HOSTED_DEPLOYMENT=true), CAPTCHA_SECRET must be a real Turnstile secret, not a Cloudflare test secret',
       path: ['CAPTCHA_SECRET'],
     },
   )
@@ -1708,9 +1790,9 @@ export const envSchema = envSchemaBase
       'SENTRY_DSN must be set in production (without it every error, final job failure and alert is dropped silently).',
     path: ['SENTRY_DSN'],
   })
-  .refine((data) => data.NODE_ENV !== 'production' || data.CAPTCHA_BYPASS_ALLOWED === false, {
+  .refine((data) => !refusesTestSwitches(data) || data.CAPTCHA_BYPASS_ALLOWED === false, {
     message:
-      'CAPTCHA_BYPASS_ALLOWED must be false in production (captcha bypass is a dev/test affordance only).',
+      'CAPTCHA_BYPASS_ALLOWED must be false in production and on every hosted deploy (captcha bypass is a dev/test affordance only).',
     path: ['CAPTCHA_BYPASS_ALLOWED'],
   })
   .refine((data) => data.NODE_ENV !== 'production' || data.CAPTCHA_FAIL_OPEN === false, {
@@ -1776,6 +1858,15 @@ export const envSchema = envSchemaBase
       'TRUST_PROXY_REQUIRED must be true in production (without a trusted proxy hop every client collapses to the proxy IP).',
     path: ['TRUST_PROXY_REQUIRED'],
   })
+  // D-6: a /0 in the TRUST_PROXY address list trusts every peer — the bare `true` the field refuses.
+  .refine(
+    (data) => data.NODE_ENV !== 'production' || !trustProxyTrustsEveryAddress(data.TRUST_PROXY),
+    {
+      message:
+        'TRUST_PROXY must not trust every address in production (a /0 CIDR lets any client set X-Forwarded-For); list the proxy addresses.',
+      path: ['TRUST_PROXY'],
+    },
+  )
   .refine(
     (data) =>
       data.OPS_ADMIN_TOKEN === undefined || data.OPS_ADMIN_TOKEN !== data.METRICS_SCRAPE_TOKEN,
@@ -1785,30 +1876,33 @@ export const envSchema = envSchemaBase
       path: ['OPS_ADMIN_TOKEN'],
     },
   )
-  .refine((data) => data.NODE_ENV !== 'production' || data.TEST_MODE === false, {
+  .refine((data) => !refusesTestSwitches(data) || data.TEST_MODE === false, {
     message:
-      'TEST_MODE must be false in production (it gates test-only affordances that must never be reachable on a deployed runtime).',
+      'TEST_MODE must be false in production and on every hosted deploy (HOSTED_DEPLOYMENT=true) — it gates test-only affordances, such as the sign-in code echo, that must never be reachable on a deployed runtime.',
     path: ['TEST_MODE'],
+  })
+  .refine((data) => !data.HOSTED_DEPLOYMENT || data.NODE_ENV !== 'local', {
+    message:
+      "HOSTED_DEPLOYMENT=true names a deploy, so NODE_ENV must be a deploy target ('development' or 'production'), not 'local'.",
+    path: ['HOSTED_DEPLOYMENT'],
   })
   .refine(
     (data) =>
       data.AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED ||
-      data.NODE_ENV === 'local' ||
-      data.NODE_ENV === 'development',
+      (!data.HOSTED_DEPLOYMENT && (data.NODE_ENV === 'local' || data.NODE_ENV === 'development')),
     {
       message:
-        "AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED may only be false on the 'local' or 'development' targets (it is the anti-mail-bomb spacing on send-code, so a deployed runtime must keep it on). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
+        "AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED may only be false on the 'local' or 'development' targets off a hosted deploy — a local machine or a CI runner (it is the anti-mail-bomb spacing on send-code, so a deployed runtime must keep it on). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
       path: ['AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED'],
     },
   )
   .refine(
     (data) =>
       !data.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED ||
-      data.NODE_ENV === 'local' ||
-      data.NODE_ENV === 'development',
+      (!data.HOSTED_DEPLOYMENT && (data.NODE_ENV === 'local' || data.NODE_ENV === 'development')),
     {
       message:
-        "MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED may only be true on the 'local' or 'development' targets (it returns the raw invitation accept token in the add-member and resend answers, so a deployed runtime must deliver it only through the email). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
+        "MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED may only be true on the 'local' or 'development' targets off a hosted deploy — a local machine or a CI runner (it returns the raw invitation accept token in the add-member and resend answers, so a deployed runtime must deliver it only through the email). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
       path: ['MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED'],
     },
   )
@@ -1828,17 +1922,16 @@ export const envSchema = envSchemaBase
       'REDIS_READY_CHECK_ENABLED must be true in production (the ready-check must stay on outside the test harness).',
     path: ['REDIS_READY_CHECK_ENABLED'],
   })
-  .refine((data) => data.NODE_ENV !== 'production' || data.RATE_LIMIT_RELAXED_CAPS === false, {
+  .refine((data) => !refusesTestSwitches(data) || data.RATE_LIMIT_RELAXED_CAPS === false, {
     message:
-      'RATE_LIMIT_RELAXED_CAPS must be false in production (credential-stuffing rate caps must stay tight).',
+      'RATE_LIMIT_RELAXED_CAPS must be false in production and on every hosted deploy (credential-stuffing rate caps must stay tight).',
     path: ['RATE_LIMIT_RELAXED_CAPS'],
   })
   .refine(
-    (data) =>
-      data.NODE_ENV !== 'production' || data.RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED === false,
+    (data) => !refusesTestSwitches(data) || data.RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED === false,
     {
       message:
-        'RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED must be false in production (a stray RUN_REDIS_TESTS=0 must never downgrade the Redis limiter to per-process counting).',
+        'RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED must be false in production and on every hosted deploy (a stray RUN_REDIS_TESTS=0 must never downgrade the Redis limiter to per-process counting).',
       path: ['RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED'],
     },
   )
@@ -1850,7 +1943,9 @@ export const envSchema = envSchemaBase
       // issuing forgeable tokens. Non-production (incl. the test harness running as `development`)
       // is unaffected. Rotate: recompute fingerprints via
       //   node -e "require('crypto');..." over src/tests/setup.ts and update FORBIDDEN_TEST_JWT_KEY_FINGERPRINTS.
-      if (data.NODE_ENV !== 'production') {
+      // H-10: refused on every hosted deploy (HOSTED_DEPLOYMENT), not only production — a hosted
+      // development API signing with a public key mints tokens anyone can forge for it.
+      if (!refusesTestSwitches(data)) {
         return true;
       }
       return !(
@@ -1860,7 +1955,7 @@ export const envSchema = envSchemaBase
     },
     {
       message:
-        'JWT_PRIVATE_KEY / JWT_PUBLIC_KEY must not be the committed test keypair (src/tests/setup.ts) in production — generate a fresh RSA keypair for the production environment.',
+        'JWT_PRIVATE_KEY / JWT_PUBLIC_KEY must not be the committed test keypair (src/tests/setup.ts) in production or on any hosted deploy — generate a fresh RSA keypair for the environment.',
       path: ['JWT_PRIVATE_KEY'],
     },
   )

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
-import { IP_FAILED_LOGIN_THRESHOLD, SECONDS_PER_DAY } from '@/shared/constants/index.js';
+import { IP_FAILED_LOGIN_THRESHOLD } from '@/shared/constants/index.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
@@ -261,7 +261,9 @@ describe('Auth Domain — Response contract (integration)', () => {
       for (const attributes of [session, csrf]) {
         expect(attributes).toContain(`path=${testApiPath('/auth')}`);
         expect(attributes).toContain(`samesite=${env.COOKIE_SAMESITE}`);
-        expect(attributes).toContain(`max-age=${env.AUTH_SESSION_MAX_AGE_DAYS * SECONDS_PER_DAY}`);
+        // E-2: browser-session cookies — no Max-Age / Expires, so closing the browser drops them.
+        expect(attributes.some((attribute) => attribute.startsWith('max-age='))).toBe(false);
+        expect(attributes.some((attribute) => attribute.startsWith('expires='))).toBe(false);
         expect(attributes.includes('secure')).toBe(env.COOKIE_SECURE);
       }
       // Page scripts must never read the refresh secret, and must read the CSRF token to echo it.

@@ -19,6 +19,7 @@ import {
 } from '@/domains/auth/auth.validator.js';
 import { AuthSerializer } from '@/domains/auth/auth.serializer.js';
 import type { AuthContainer } from '@/domains/auth/auth.container.js';
+import { ACCOUNT_SECURITY_NOTICE } from '@/domains/auth/sub-domains/auth-method/events/auth.events.js';
 
 type AuthAuthMethodHandlersDependencies = Pick<
   AuthContainer,
@@ -113,6 +114,11 @@ export function createAuthAuthMethodHandlers({
           severity: 'WARNING',
         },
       });
+      await authMethodService.sendAccountSecurityNotice({
+        userPublicId,
+        notice: ACCOUNT_SECURITY_NOTICE.PASSWORD_CHANGED,
+        locale: toSupportedLanguage(request.language),
+      });
 
       // MFA users complete the second factor before a session is issued (the reset never bypasses MFA).
       if ('mfa_required' in data) {
@@ -139,10 +145,17 @@ export function createAuthAuthMethodHandlers({
     stepUp: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
       const parsed = validateStepUpVerify(request.body);
+      // Step-up sentinel is per-(user, session) (sec-A2); fail closed if session id is missing —
+      // before any attempt is counted, since a spent password budget revokes this session (A-3).
+      const sessionPublicId = auth.sessionPublicId;
+      if (!sessionPublicId) {
+        throw new ForbiddenError('errors:recentStepUpRequired');
+      }
       let factor: StepUpFactor;
       if ('password' in parsed) {
         await authMethodService.verifyPasswordForStepUp({
           userPublicId: auth.userId,
+          sessionPublicId,
           password: parsed.password,
         });
         factor = 'password';
@@ -157,14 +170,10 @@ export function createAuthAuthMethodHandlers({
         });
         factor = 'email_code';
       }
-      // Step-up sentinel is per-(user, session) (sec-A2); fail closed if session id is missing.
-      if (!auth.sessionPublicId) {
-        throw new ForbiddenError('errors:recentStepUpRequired');
-      }
       await recordRecentStepUp({
         redis: redisConnection,
         userPublicId: auth.userId,
-        sessionPublicId: auth.sessionPublicId,
+        sessionPublicId,
         factor,
       });
       await recordScopedAuditEvent({
@@ -196,6 +205,11 @@ export function createAuthAuthMethodHandlers({
           action: 'auth.password.change',
           resource_type: 'user',
         },
+      });
+      await authMethodService.sendAccountSecurityNotice({
+        userPublicId: auth.userId,
+        notice: ACCOUNT_SECURITY_NOTICE.PASSWORD_CHANGED,
+        locale: toSupportedLanguage(request.language),
       });
       return reply.code(204).send();
     },

@@ -1,4 +1,19 @@
 import { RECORD_SHORT_TEXT_MAX } from '@/shared/constants/record-fields.constants.js';
+import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
+
+/**
+ * Who sees a patient's medical details — the clinical team (`patient:clinical_record:read`: Doctor,
+ * Therapist, Counsellor, Owner, Admin), whoever records them at intake (`patient:update`: the Front
+ * desk) and whoever dispenses (`patient_prescription:read`: the Pharmacist). Any one is enough; the
+ * Accountant and Marketing (`patient:read` only) see the name and the contact (launch D83 (3)) —
+ * on a file, a check-in's clinical text, a session's remark and the activity entry a check-in
+ * writes (B1-1).
+ */
+export const PATIENT_MEDICAL_DETAIL_READERS = [
+  APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
+  APP_PERMISSIONS.PATIENT_UPDATE,
+  APP_PERMISSIONS.PATIENT_PRESCRIPTION_READ,
+] as const;
 /** The patient number's display prefix (`PT-0412`) — also read by the list's `q` (P9). */
 export const PATIENT_NUMBER_PREFIX = 'PT';
 

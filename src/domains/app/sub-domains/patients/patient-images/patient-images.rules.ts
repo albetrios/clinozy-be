@@ -2,7 +2,11 @@ import { runEnqueueAfterCommit } from '@/core/events/event-bus.js';
 import { toText } from '@/shared/utils/validation/record-fields.util.js';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 import { requireConfirmedUploads } from '@/domains/app/base-record.service.js';
-import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
+import {
+  type BaseRecordRules,
+  type BaseRecordWriteContext,
+  UPLOAD_RECORD_RESOURCE,
+} from '@/domains/app/base-record.types.js';
 import { ContactActivitiesRepository } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.repository.js';
 import { patientFileValueLabel } from '@/domains/app/sub-domains/patients/patients.constants.js';
 import {
@@ -173,9 +177,14 @@ export function createPatientImagesRules(repository: PatientImagesRepository): B
     },
     decorate: async (outputs, context) => {
       // D86: a link that shows each photo — only rows the caller may read reach here (P23)
+      // C-2: a photo is signed only for the photo it is bound to
       const links = await context.ports.fileReadUrls({
         organizationId: context.organizationId,
-        fileKeys: outputs.map((output) => toText(output.file_key)),
+        bindings: outputs.map((output) => ({
+          fileKey: toText(output.file_key),
+          resource: UPLOAD_RECORD_RESOURCE.PATIENT_IMAGE,
+          publicId: String(output.id),
+        })),
       });
       for (const output of outputs) {
         output.file_url = links.get(toText(output.file_key))?.url ?? null;

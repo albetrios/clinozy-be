@@ -54,15 +54,26 @@ care, in the nested sub-domains below. **The person lives on the contact** (P1, 
   and doctor from the visit, `lead_id` the lead), not converted — the first treatment converts (P4).
 - **Never purged (P7):** soft delete only; out of `APP_RECORD_TABLES`; every table pointing at a
   patient does so `ON DELETE RESTRICT`.
+- **Links stay inside the clinic (B2-5):** the file's contact, home branch and lead, and each
+  clinical record's patient, visit, treatment, bought session, offering, check-in, review, invoice
+  line or diagnosis, are composite keys `(organization_id, <column>)` → `(organization_id, id)`; the
+  database refuses a link to another clinic's record (`20261101101100_tenant_composite_foreign_keys.sql`).
 - **The clinical gates (P14):** clinical notes, photos and reports are read with
   `patient:clinical_record:read` and written with `patient:update` and it; a private photo also
-  needs `patient:private_album:read` (P23).
+  needs `patient:private_album:read` (P23). Deleting or restoring a clinical note, photo, report or
+  check-in also needs `patient:delete` — Owner and Admin, like every other delete (D12, B1-2).
+- **Clinical records are never purged (G2-4):** the visit, clinical notes, diagnoses,
+  prescriptions, photos, reports, check-ins and the treatment plan are kept for good once deleted —
+  `APP_RECORD_KEPT_TABLES`, out of the purge like the file itself; the clinic's
+  `deleted_record_purge_days` does not apply to them.
 - **Medical details unless clinical (launch D83 (3)):** a file's `allergies`, `contraindications`
   and `notes` are `null` on every answer (the list, the file, the create / change / restore
   answers; the export's cells blank) unless the caller holds `patient:clinical_record:read`,
   `patient:update` or `patient_prescription:read` — the controller's `hiddenFields` (any of the
   codes), the mechanism the offerings' `min_price` uses. The Accountant and Marketing see the name
-  and the contact.
+  and the contact. The same list (`PATIENT_MEDICAL_DETAIL_READERS`, `patients.constants.ts`) hides
+  a check-in's `context`, `followed_note`, `current_state` and `next_plan`, a session's `remark`,
+  and keeps a check-in's activity entry out of other callers' streams (B1-1).
 - **Reviews have their own codes (launch D83 (4)):** `patient_review:create` · `update` · `delete`
   gate the review writes (7.J), so Marketing logs reviews without `patient:update`.
 - **Tenant isolation:** ENABLE + FORCE RLS on the organization GUC; not branch-scoped (P6).

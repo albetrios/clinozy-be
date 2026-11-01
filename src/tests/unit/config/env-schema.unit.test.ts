@@ -318,35 +318,42 @@ describe('env-schema', () => {
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.PORT).toBe(4000);
-      expect(parsed.data.AUTH_SESSION_MAX_AGE_DAYS).toBe(7);
+      // E-2: a 12-hour absolute cap and a 30-minute idle timeout unless an operator says otherwise.
+      expect(parsed.data.AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS).toBe(43_200);
+      expect(parsed.data.AUTH_SESSION_IDLE_TIMEOUT_SECONDS).toBe(1800);
     }
   });
 
-  // sec-r4-C4: AUTH_SESSION_MAX_AGE_DAYS must be bounded at 365 so a config
-  // typo cannot produce effectively-never-expiring sessions.
-  it('rejects AUTH_SESSION_MAX_AGE_DAYS above 365 (sec-r4-C4)', () => {
+  // sec-r4-C4: the absolute session lifetime is bounded at one year so a config typo cannot
+  // produce effectively-never-expiring sessions; E-2 adds the idle timeout, bounded at one day.
+  it.each([
+    ['AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS', '31536001'],
+    ['AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS', '299'],
+    ['AUTH_SESSION_IDLE_TIMEOUT_SECONDS', '86401'],
+    ['AUTH_SESSION_IDLE_TIMEOUT_SECONDS', '59'],
+  ])('rejects %s=%s outside its bounds (sec-r4-C4, E-2)', (key, value) => {
     const parsed = envSchema.safeParse({
       ...commonRequiredBase,
       NODE_ENV: 'development',
-      AUTH_SESSION_MAX_AGE_DAYS: '366',
+      [key]: value,
     });
     expect(parsed.success).toBe(false);
     if (!parsed.success) {
-      expect(
-        parsed.error.issues.some((issue) => issue.path.includes('AUTH_SESSION_MAX_AGE_DAYS')),
-      ).toBe(true);
+      expect(parsed.error.issues.some((issue) => issue.path.includes(key))).toBe(true);
     }
   });
 
-  it('accepts AUTH_SESSION_MAX_AGE_DAYS at the 365 ceiling (sec-r4-C4)', () => {
+  it('accepts the session limits at their ceilings (sec-r4-C4, E-2)', () => {
     const parsed = envSchema.safeParse({
       ...commonRequiredBase,
       NODE_ENV: 'development',
-      AUTH_SESSION_MAX_AGE_DAYS: '365',
+      AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS: '31536000',
+      AUTH_SESSION_IDLE_TIMEOUT_SECONDS: '86400',
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      expect(parsed.data.AUTH_SESSION_MAX_AGE_DAYS).toBe(365);
+      expect(parsed.data.AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS).toBe(31_536_000);
+      expect(parsed.data.AUTH_SESSION_IDLE_TIMEOUT_SECONDS).toBe(86_400);
     }
   });
 
@@ -627,6 +634,71 @@ describe('env-schema', () => {
     if (!parsed.success) {
       expect(parsed.error.flatten().fieldErrors.TRUST_PROXY).toBeDefined();
     }
+  });
+
+  // D-6: a hop count trusts whatever peer connects; an address list trusts a hop only when its
+  // peer is a listed proxy, so a client reaching the app around the proxy cannot spoof its IP.
+  describe('TRUST_PROXY address list', () => {
+    it('parses a comma-separated IP/CIDR list (and the proxy-addr named ranges)', () => {
+      const parsed = envSchema.safeParse({
+        ...commonRequiredBase,
+        NODE_ENV: 'development',
+        TRUST_PROXY: ' 10.0.0.0/8, 100.64.0.0/10 ,192.0.2.7,FD00::/8,loopback',
+      });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.TRUST_PROXY).toEqual([
+          '10.0.0.0/8',
+          '100.64.0.0/10',
+          '192.0.2.7',
+          'fd00::/8',
+          'loopback',
+        ]);
+      }
+    });
+
+    it.each(['10.0.0.0/33', 'fd00::/129', '10.0.0/8', 'proxy.internal', '10.0.0.0/8/1', '11'])(
+      'rejects the malformed entry %s',
+      (TRUST_PROXY) => {
+        const parsed = envSchema.safeParse({
+          ...commonRequiredBase,
+          NODE_ENV: 'development',
+          TRUST_PROXY,
+        });
+        expect(parsed.success).toBe(false);
+        if (!parsed.success) {
+          expect(parsed.error.flatten().fieldErrors.TRUST_PROXY).toBeDefined();
+        }
+      },
+    );
+
+    it.each(['0.0.0.0/0', '10.0.0.0/8,::/0', '10.0.0.0/00'])(
+      'rejects the trust-everyone list %s in production',
+      (TRUST_PROXY) => {
+        const result = envSchema.safeParse({ ...productionRequiredBase, TRUST_PROXY });
+        expect(result.success).toBe(false);
+        expect(JSON.stringify(result.error?.issues)).toContain('must not trust every address');
+      },
+    );
+
+    it('allows a /0 list outside production', () => {
+      for (const NODE_ENV of ['local', 'development'] as const) {
+        const result = envSchema.safeParse({
+          ...commonRequiredBase,
+          NODE_ENV,
+          TRUST_PROXY: '0.0.0.0/0',
+        });
+        expect(result.success, `${NODE_ENV} should allow it`).toBe(true);
+      }
+    });
+
+    it('accepts a proxy CIDR list in production', () => {
+      const result = envSchema.safeParse({
+        ...productionRequiredBase,
+        TRUST_PROXY: '100.64.0.0/10',
+      });
+      expect(result.error?.issues.filter((issue) => issue.path[0] === 'TRUST_PROXY')).toBeFalsy();
+    });
   });
 
   it('transforms TRUST_PROXY disabled values to false', () => {
@@ -1617,6 +1689,100 @@ describe('env-schema', () => {
     it('accepts a fresh production RSA keypair (control)', () => {
       const parsed = envSchema.safeParse({ ...productionRequiredBase });
       expect(parsed.success).toBe(true);
+    });
+
+    it('rejects the committed test keypair on a hosted development deploy (H-10)', () => {
+      const parsed = envSchema.safeParse({
+        ...commonRequiredBase,
+        NODE_ENV: 'development',
+        HOSTED_DEPLOYMENT: 'true',
+        CAPTCHA_PROVIDER: 'turnstile',
+        CAPTCHA_SECRET: 'turnstile-secret',
+        JWT_PRIVATE_KEY: COMMITTED_TEST_PRIVATE_KEY,
+        JWT_PUBLIC_KEY: COMMITTED_TEST_PUBLIC_KEY,
+      });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues.some((issue) => issue.path.includes('JWT_PRIVATE_KEY'))).toBe(
+          true,
+        );
+      }
+    });
+  });
+
+  // A-4 (owner decision): test-only switches are refused on EVERY hosted deploy — the Railway
+  // deploy sets HOSTED_DEPLOYMENT=true for development and production alike — and stay allowed on
+  // local machines and CI runners, which never carry the marker.
+  describe('A-4: hosted deploys refuse test-only switches', () => {
+    const hostedDevelopmentBase = {
+      ...commonRequiredBase,
+      NODE_ENV: 'development',
+      HOSTED_DEPLOYMENT: 'true',
+      CAPTCHA_PROVIDER: 'turnstile',
+      CAPTCHA_SECRET: 'turnstile-secret',
+    };
+
+    it('accepts a hosted development deploy that sets none of them (control)', () => {
+      const parsed = envSchema.safeParse(hostedDevelopmentBase);
+      expect(parsed.success).toBe(true);
+      expect(parsed.success && parsed.data.HOSTED_DEPLOYMENT).toBe(true);
+    });
+
+    it('defaults HOSTED_DEPLOYMENT to false', () => {
+      const parsed = envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: 'development' });
+      expect(parsed.success && parsed.data.HOSTED_DEPLOYMENT).toBe(false);
+    });
+
+    const TEST_SWITCHES: Array<[string, string, string]> = [
+      ['TEST_MODE', 'true', 'TEST_MODE'],
+      ['CAPTCHA_BYPASS_ALLOWED', 'true', 'CAPTCHA_BYPASS_ALLOWED'],
+      ['RATE_LIMIT_RELAXED_CAPS', 'true', 'RATE_LIMIT_RELAXED_CAPS'],
+      ['RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED', 'true', 'RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED'],
+      [
+        'MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED',
+        'true',
+        'MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED',
+      ],
+      [
+        'AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED',
+        'false',
+        'AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED',
+      ],
+      ['CAPTCHA_PROVIDER', 'disabled', 'CAPTCHA_PROVIDER'],
+      // A Cloudflare always-pass test secret.
+      ['CAPTCHA_SECRET', '1x0000000000000000000000000000000AA', 'CAPTCHA_SECRET'], // gitleaks:allow
+    ];
+
+    it.each(TEST_SWITCHES)('rejects %s=%s on a hosted development deploy', (key, value, path) => {
+      const parsed = envSchema.safeParse({ ...hostedDevelopmentBase, [key]: value });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues.some((issue) => issue.path.includes(path))).toBe(true);
+      }
+    });
+
+    it.each(TEST_SWITCHES)(
+      'still allows %s=%s on a development runner without the marker (CI, local)',
+      (key, value) => {
+        const parsed = envSchema.safeParse({
+          ...commonRequiredBase,
+          NODE_ENV: 'development',
+          CAPTCHA_PROVIDER: 'turnstile',
+          CAPTCHA_SECRET: 'turnstile-secret',
+          [key]: value,
+        });
+        expect(parsed.success).toBe(true);
+      },
+    );
+
+    it('rejects HOSTED_DEPLOYMENT=true with NODE_ENV=local (a deploy names a deploy target)', () => {
+      const parsed = envSchema.safeParse({ ...hostedDevelopmentBase, NODE_ENV: 'local' });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues.some((issue) => issue.path.includes('HOSTED_DEPLOYMENT'))).toBe(
+          true,
+        );
+      }
     });
   });
 });

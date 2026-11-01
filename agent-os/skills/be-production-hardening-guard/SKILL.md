@@ -29,6 +29,9 @@ Enforce production-readiness checks across the codebase. Verifies security heade
 - [ ] Helmet middleware configured with strict CSP
 - [ ] CORS restricted to `ALLOWED_ORIGINS` (mandatory in production)
 - [ ] Rate limiting on all sensitive endpoints (login, email verification-code, password reset)
+- [ ] Global per-IP limit runs as an app-level `onRequest` hook — ahead of route `authenticate` and on the not-found handler — and failed authentication has its own per-address budget (`failed-authentication-rate-limit.ts`); every IP key goes through `rateLimitIpKey()` (IPv6 /64)
+- [ ] Private responses never cacheable: `/api/v1/app/*`, `/api/v1/users/me*` and authenticated responses without their own `Cache-Control` answer `no-store` (`compress.middleware.ts`)
+- [ ] Database failures leave the process only through `sanitizeDatabaseError` (`{ name, code, constraint, table }` — no statement, bound values or row `detail`) in logs, Sentry and the dead-letter ledger
 - [ ] X-Idempotency-Key support for write operations
 
 ### Database

@@ -66,7 +66,11 @@ describe('Chaos resilience: BullMQ webhook delivery survives transient Postgres 
       payload: { simulatedEvent: true },
     });
 
-    webhookDeliveryWorkerHandleAwaitingObservation = createWebhookDeliveryWorker();
+    // The worker pins every delivery unless a fetch is injected (C-4); inject one that forwards
+    // to the global the spy below replaces, so the probe observes the outbound call.
+    webhookDeliveryWorkerHandleAwaitingObservation = createWebhookDeliveryWorker({
+      fetchImplementation: (input, init) => globalThis.fetch(input, init),
+    });
 
     enqueueQueueAwaitingIsolation = new Queue(WEBHOOK_DELIVERY_QUEUE_NAME, {
       connection: getBullMQConnectionOptions(),

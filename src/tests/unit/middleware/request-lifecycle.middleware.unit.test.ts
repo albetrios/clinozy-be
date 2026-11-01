@@ -29,9 +29,12 @@ vi.mock('@/shared/middlewares/core/idempotency.middleware.js', () => ({
   idempotencyOnResponse: idempotencyOnResponseMock,
 }));
 
+const clearCommitDispatchMarkerMock = vi.fn((_requestId: string) => false);
+
 vi.mock('@/core/events/event-bus.js', () => ({
   eventBus: {
     flushOnCommit: flushOnCommitMock,
+    clearCommitDispatchMarker: clearCommitDispatchMarkerMock,
   },
   enterOnCommitScope: vi.fn(),
 }));
@@ -53,12 +56,17 @@ async function buildApplication(): Promise<FastifyInstance> {
     callOrder.push('handler_done');
     return { ok: true };
   });
+  // A handler that never answers: no onSend, no onResponse — only the abort hook runs.
+  application.post('/hang', () => new Promise(() => {}));
   await application.ready();
   return application;
 }
 
-/** Sends `POST /slow` to a listening server and disconnects while the handler is still running. */
-async function abortWhileTheHandlerRuns(application: FastifyInstance): Promise<void> {
+/** Sends `POST <path>` to a listening server and disconnects while the handler is still running. */
+async function abortWhileTheHandlerRuns(
+  application: FastifyInstance,
+  path = '/slow',
+): Promise<void> {
   await application.listen({ port: 0, host: '127.0.0.1' });
   const { port } = application.server.address() as AddressInfo;
   await new Promise<void>((resolve) => {
@@ -66,7 +74,7 @@ async function abortWhileTheHandlerRuns(application: FastifyInstance): Promise<v
       host: '127.0.0.1',
       port,
       method: 'POST',
-      path: '/slow',
+      path,
       headers: { 'content-type': 'application/json' },
     });
     clientRequest.on('error', () => resolve());
@@ -81,6 +89,7 @@ describe('request-lifecycle middleware: onResponse step ordering', () => {
     callOrder.length = 0;
     idempotencyOnResponseMock.mockClear();
     flushOnCommitMock.mockClear();
+    clearCommitDispatchMarkerMock.mockReset().mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -162,5 +171,35 @@ describe('request-lifecycle middleware: onResponse step ordering', () => {
 
     expect(idempotencyOnResponseMock).toHaveBeenCalledOnce();
     expect(flushOnCommitMock).toHaveBeenCalledOnce();
+  });
+
+  // D-10: a handler that never answers never reaches a flush, so its commit-dispatch marker stayed
+  // in the process-wide set for the life of the process.
+  it('clears the commit-dispatch marker when the client leaves a handler that never answers', async () => {
+    const application = await buildApplication();
+
+    await abortWhileTheHandlerRuns(application, '/hang');
+
+    await vi.waitFor(() => expect(clearCommitDispatchMarkerMock).toHaveBeenCalledOnce());
+    expect(clearCommitDispatchMarkerMock).toHaveBeenCalledWith(expect.any(String));
+    expect(flushOnCommitMock).not.toHaveBeenCalled();
+
+    await application.close();
+  });
+
+  it('still drains the durable tasks when an aborted handler finishes after the marker was cleared', async () => {
+    clearCommitDispatchMarkerMock.mockReturnValue(true);
+    const application = await buildApplication();
+
+    await abortWhileTheHandlerRuns(application);
+
+    await vi.waitFor(() => expect(flushOnCommitMock).toHaveBeenCalledOnce());
+    const [clearedRequestId] = clearCommitDispatchMarkerMock.mock.calls[0] ?? [];
+    expect(flushOnCommitMock).toHaveBeenCalledWith({
+      requestId: clearedRequestId,
+      durableTasksPending: true,
+    });
+
+    await application.close();
   });
 });

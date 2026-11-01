@@ -40,14 +40,13 @@ describe('rate-limit-presets', () => {
     expect(STRICT_PUBLIC_RATE_LIMIT.config.rateLimit.timeWindow).toBe(60_000);
   });
 
-  it('STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS caps per email at 5 / 15 min on preHandler outside test', async () => {
+  it('STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS caps per email at 5 / 15 min outside test', async () => {
     mockEnv.RATE_LIMIT_RELAXED_CAPS = false;
     const { STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS } = await import(
       '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js'
     );
     expect(STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS.max).toBe(5);
     expect(STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS.timeWindow).toBe(15 * 60_000);
-    expect(STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS.hook).toBe('preHandler');
   });
 
   it('STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS lifts the cap when RATE_LIMIT_RELAXED_CAPS', async () => {
@@ -139,6 +138,25 @@ describe('rate-limit-presets', () => {
     expect(key).toBe('ip:203.0.113.7');
   });
 
+  it('every IP fallback keys an IPv6 caller on its /64 (D-3)', async () => {
+    const {
+      STRICT_PUBLIC_RATE_LIMIT,
+      STRICT_AUTHED_RATE_LIMIT,
+      ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+      STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS,
+    } = await import('@/shared/middlewares/rate-limit/rate-limit-presets.constants.js');
+    const request = { ip: '2001:db8:1:2:aaaa:bbbb:cccc:dddd', body: {}, auth: null } as never;
+    const keyGenerators = [
+      STRICT_PUBLIC_RATE_LIMIT.config.rateLimit.keyGenerator,
+      STRICT_AUTHED_RATE_LIMIT.config.rateLimit.keyGenerator,
+      ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config.rateLimit.keyGenerator,
+      STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS.keyGenerator,
+    ];
+    for (const keyGenerator of keyGenerators) {
+      expect(await keyGenerator?.(request)).toBe('ip:2001:db8:1:2::');
+    }
+  });
+
   it('org-scoped key namespaces the organization by actor so victim buckets are isolated (audit #14)', async () => {
     const { ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT } = await import(
       '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js'
@@ -201,10 +219,17 @@ describe('rate-limit-presets', () => {
    */
   it('every preset reports the requests it REJECTED, not the ones it allowed', async () => {
     const presets = await import('@/shared/middlewares/rate-limit/rate-limit-presets.constants.js');
-    const limiterOptions = Object.entries(presets).map(([name, preset]) => {
-      const candidate = preset as { config?: { rateLimit?: RateLimitOptions } } & RateLimitOptions;
-      return [name, candidate.config?.rateLimit ?? candidate] as const;
-    });
+    // The per-email options feed a standalone `app.createRateLimit(...)` limiter, which never calls
+    // `onExceeded`; it reports each refusal itself (`refuseRateLimitedRequest`).
+    const STANDALONE_LIMITER_OPTIONS = new Set(['STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS']);
+    const limiterOptions = Object.entries(presets)
+      .filter(([name]) => !STANDALONE_LIMITER_OPTIONS.has(name))
+      .map(([name, preset]) => {
+        const candidate = preset as {
+          config?: { rateLimit?: RateLimitOptions };
+        } & RateLimitOptions;
+        return [name, candidate.config?.rateLimit ?? candidate] as const;
+      });
     expect(limiterOptions.length).toBeGreaterThan(0);
 
     for (const [name, options] of limiterOptions) {

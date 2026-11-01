@@ -7,6 +7,7 @@ import {
   trace,
 } from '@opentelemetry/api';
 import { OTEL_TRACER_NAME } from '@/shared/constants/project-identity.constants.js';
+import { sanitizeDatabaseError } from '@/shared/utils/security/sensitive-redaction.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 
 /** W3C trace context fields stored on BullMQ job payloads for cross-process propagation. */
@@ -62,11 +63,15 @@ export async function runWithPropagatedTraceContext<T>({
         span.setStatus({ code: SpanStatusCode.OK });
         return result;
       } catch (error) {
+        // A database error's message carries its SQL and bound values (patient data); the span
+        // and its exception event leave the process, so they get the sanitized form (C-1). The
+        // caller still receives the original error.
+        const recorded = sanitizeDatabaseError(error);
         span.setStatus({
           code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : String(error),
+          message: recorded instanceof Error ? recorded.message : String(recorded),
         });
-        span.recordException(error instanceof Error ? error : new Error(String(error)));
+        span.recordException(recorded instanceof Error ? recorded : new Error(String(recorded)));
         throw error;
       } finally {
         span.end();

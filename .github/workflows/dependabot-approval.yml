@@ -1,0 +1,45 @@
+name: Dependabot approval
+
+# Step 1 of 2 of Dependabot auto-merge: a maintainer's approval of a low-risk Dependabot PR (the
+# `npm-non-major` group) starts dependabot-auto-merge.yml, which arms the merge.
+#
+# This job holds nothing: no environment, no secret, a read-only token. A pull_request_review run
+# uses the workflow file of the PR's merge commit, so a PR could rewrite this file; the job is a
+# signal only. dependabot-auto-merge.yml runs main's copy of itself (workflow_run), checks every
+# condition again from the GitHub API — the author, the group, a trusted approval of the current
+# head — and only then reads the release PAT from the development environment, which allows the
+# main branch only (H-3, H-4).
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-approval-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
+
+jobs:
+  approved:
+    name: Approved low-risk Dependabot update
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    # A maintainer (owner, organization member or collaborator — H-3) approved a Dependabot PR in
+    # the non-major npm group. `npm-major` does not contain the substring `npm-non-major`.
+    if: >-
+      github.event.review.state == 'approved' &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association) &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      (
+        contains(github.event.pull_request.title, 'npm-non-major') ||
+        contains(github.event.pull_request.head.ref, 'npm-non-major')
+      )
+    steps:
+      - name: Hand the approval to dependabot-auto-merge.yml
+        run: echo "Approved; dependabot-auto-merge.yml checks it again and arms the merge."

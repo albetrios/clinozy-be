@@ -23,7 +23,32 @@ import { ensurePersonalOrganization } from '@/domains/tenancy/sub-domains/organi
 import type { OAuthProfile, OAuthProvider } from './oauth.types.js';
 import type { UserAuthRecord } from '@/domains/user/user.types.js';
 
-/** Account-takeover guard + bare-placeholder claim for an OAuth find-or-link into a PRE-EXISTING account. Refuses to silently merge into an account whose email is unverified — throwing `ForbiddenError('errors:oauthLinkRequiresVerifiedAccount')` — UNLESS this OAuth identity is already linked, the account's email is already verified, or the account is a bare invited placeholder (no password, no login-capable method, and no WebAuthn passkey), which has no credential or data to take over and whose email the provider has now proven. A claimed bare placeholder has its email flipped to verified (parity with a fresh OAuth signup, and so the claimer can accept their organization invite). Returns the (possibly re-read) user row and whether a bare placeholder was claimed. Extracted from {@link completeOAuthUserSession} to keep that function under the cognitive-complexity budget. */
+/**
+ * Refuses an OAuth sign-in through a provider the account owner removed (A-5): without this the
+ * callback found the account by email and linked a fresh OAuth row, undoing the removal.
+ */
+async function refuseTurnedOffOAuthSignIn({
+  authMethodService,
+  user,
+  provider,
+}: {
+  authMethodService: AuthMethodService;
+  user: UserAuthRecord;
+  provider: OAuthProvider;
+}): Promise<void> {
+  const turnedOff = await authMethodService.isLoginMethodTurnedOff({
+    userPublicId: user.public_id,
+    userId: user.id,
+    methodType: AUTH_METHOD_TYPE.OAUTH,
+    provider,
+  });
+  if (turnedOff) {
+    logger.warn({ userId: user.public_id, provider }, 'oauth.user.login_method_turned_off');
+    throw new ForbiddenError('errors:loginMethodTurnedOff');
+  }
+}
+
+/** Account-takeover guard + bare-placeholder claim for an OAuth find-or-link into a PRE-EXISTING account. Refuses to silently merge into an account whose email is unverified — throwing `ForbiddenError('errors:oauthLinkRequiresVerifiedAccount')` — UNLESS this OAuth identity is already linked, the account's email is already verified, or the account is a bare invited placeholder (no password, no login-capable method, and no WebAuthn passkey — an `EMAIL_CODE` row on a still-unverified email, left by send-code pre-registration, does not count: A-7), which has no credential or data to take over and whose email the provider has now proven. A claimed bare placeholder has its email flipped to verified (parity with a fresh OAuth signup, and so the claimer can accept their organization invite). Refuses (`errors:loginMethodTurnedOff`) a provider the owner removed from the account (A-5). Returns the (possibly re-read) user row and whether a bare placeholder was claimed. Extracted from {@link completeOAuthUserSession} to keep that function under the cognitive-complexity budget. */
 async function resolveExistingOAuthAccount(parameters: {
   authMethodService: AuthMethodService;
   userService: UserService;
@@ -39,6 +64,9 @@ async function resolveExistingOAuthAccount(parameters: {
     provider_user_id: profile.provider_user_id,
   });
   const isOAuthIdentityAlreadyLinked = existingProviderMethod?.user_id === resolvedUser.id;
+  if (!isOAuthIdentityAlreadyLinked) {
+    await refuseTurnedOffOAuthSignIn({ authMethodService, user: resolvedUser, provider });
+  }
   // A bare placeholder has NO usable credential of any kind: no password, no login-capable auth
   // method, AND no WebAuthn passkey. Counting passkeys (not just `hasLoginCapableMethod`) means
   // takeover safety does not rely on the implicit "passkey ⇒ verified email" invariant. Check the

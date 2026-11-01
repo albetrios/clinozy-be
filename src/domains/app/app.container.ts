@@ -8,6 +8,8 @@ import { ValidationError } from '@/shared/errors/index.js';
 import type {
   BaseRecordConfirmedUpload,
   BaseRecordFileLink,
+  BaseRecordUploadBinding,
+  BaseRecordUploadOwner,
   BaseRecordPorts,
 } from './base-record.types.js';
 import { BranchesRepository } from './sub-domains/branches/branches.repository.js';
@@ -100,6 +102,9 @@ export function createAppContainer({
     fileReadUrls: () => {
       throw new Error('App uploads are not wired (domain-containers.plugin.ts → wireAppUploads)');
     },
+    bindUploadKeys: () => {
+      throw new Error('App uploads are not wired (domain-containers.plugin.ts → wireAppUploads)');
+    },
     thumbnailReadUrls: () => {
       throw new Error('App uploads are not wired (domain-containers.plugin.ts → wireAppUploads)');
     },
@@ -165,10 +170,17 @@ export interface AppUploadChecker {
     fileKey: string;
     organizationInternalId: number;
   }): Promise<void>;
+  /** Signs the links of the keys bound to the record each names (C-2). */
   createReadUrls(options: {
     organizationInternalId: number;
-    fileKeys: readonly string[];
+    bindings: readonly BaseRecordUploadBinding[];
   }): Promise<ReadonlyMap<string, BaseRecordFileLink>>;
+  /** Binds the organization's confirmed uploads to a record on its first attach (C-2). */
+  bindKeysToRecord(options: {
+    organizationInternalId: number;
+    fileKeys: readonly string[];
+    owner: BaseRecordUploadOwner;
+  }): Promise<number>;
   createThumbnailReadUrls(options: {
     organizationPublicId: string;
     thumbnailKeys: readonly string[];
@@ -205,8 +217,10 @@ export function wireAppUploads({
   };
   container.ports.removeImageLocation = ({ scope, organizationId, fileKey }) =>
     uploads.removeImageLocation({ scope, fileKey, organizationInternalId: organizationId });
-  container.ports.fileReadUrls = ({ organizationId, fileKeys }) =>
-    uploads.createReadUrls({ organizationInternalId: organizationId, fileKeys });
+  container.ports.fileReadUrls = ({ organizationId, bindings }) =>
+    uploads.createReadUrls({ organizationInternalId: organizationId, bindings });
+  container.ports.bindUploadKeys = ({ organizationId, fileKeys, owner }) =>
+    uploads.bindKeysToRecord({ organizationInternalId: organizationId, fileKeys, owner });
   container.ports.thumbnailReadUrls = ({ organizationPublicId, thumbnailKeys }) =>
     uploads.createThumbnailReadUrls({ organizationPublicId, thumbnailKeys });
 }

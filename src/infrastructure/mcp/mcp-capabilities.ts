@@ -45,8 +45,50 @@ export interface CallApiPolicyOptions {
   allowedPathPrefixes: readonly string[];
 }
 
-/** Outcome of {@link evaluateCallApiPolicy}: allowed, or rejected with a client-safe message. */
-export type CallApiPolicyResult = { allowed: true } | { allowed: false; message: string };
+/**
+ * Outcome of {@link evaluateCallApiPolicy}: allowed with the normalised `url` the sub-request
+ * must use, or rejected with a client-safe message.
+ */
+export type CallApiPolicyResult =
+  | { allowed: true; url: string }
+  | { allowed: false; message: string };
+
+/** Origin the `call_api` path is resolved against; only compared, never fetched. */
+const CALL_API_PATH_BASE = 'https://call-api.invalid';
+
+/**
+ * A `.` or `..` path segment, raw or percent-encoded (`%2e`, any case), between separators or at
+ * the end of the path part. `new URL()` and Fastify's inject resolve both forms, so `/api/v1/../admin` and
+ * `/api/v1/%2e%2e/admin` would leave the checked prefix after the check passed.
+ */
+const DOT_SEGMENT_PATTERN = /(?:^|\/)(?:\.|%2e){1,2}(?=$|\/)/i;
+
+/**
+ * Whitespace (URL parsing drops tabs and newlines, so `.<tab>.` becomes `..`), a backslash, or a
+ * percent-encoded separator (`%2f`, `%5c`): no API path needs one.
+ */
+const UNSAFE_PATH_CHARACTER_PATTERN = /[\s\\]|%2f|%5c/i;
+
+/**
+ * The path `call_api` may inject: same-origin, no dot segment, no unsafe character, resolved to
+ * `pathname + search` — or `null` when the path is refused.
+ */
+function normaliseCallApiPath(path: string): string | null {
+  if (!path.startsWith('/') || path.startsWith('//')) return null;
+  // The query and fragment never move the route, so only the path part is screened.
+  const pathPart = path.split(/[?#]/, 1)[0] ?? '';
+  if (DOT_SEGMENT_PATTERN.test(pathPart) || UNSAFE_PATH_CHARACTER_PATTERN.test(pathPart)) {
+    return null;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(path, CALL_API_PATH_BASE);
+  } catch {
+    return null;
+  }
+  if (parsed.origin !== CALL_API_PATH_BASE) return null;
+  return `${parsed.pathname}${parsed.search}`;
+}
 
 /**
  * R14: decides whether a `call_api` invocation is permitted, consolidating every gate the
@@ -54,15 +96,32 @@ export type CallApiPolicyResult = { allowed: true } | { allowed: false; message:
  * read-only-by-default method restriction, and the optional operator path-prefix allowlist.
  *
  * @remarks
- * - **Algorithm:** path-prefix gate → method gate (GET unless `allowMutations`) → optional
- *   allowlist gate; returns `{ allowed: true }` only when all pass.
+ * - **Algorithm:** normalise the path (reject a dot segment — raw or `%2e` — a backslash, an
+ *   encoded separator, or a different origin; resolve with `new URL()`) → path-prefix gate on the
+ *   normalised path → method gate (GET unless `allowMutations`) → optional allowlist gate on the
+ *   normalised path; returns `{ allowed: true, url }` only when all pass. The caller injects `url`,
+ *   so the path checked is the path called (C-3).
  * - **Failure modes:** none thrown — every rejection returns a client-safe `message` string.
  * - **Side effects:** pure; reads no globals (config is passed in), so it is fully unit-testable.
  * - **Notes:** the message is safe to surface to the (admin) MCP client; it carries no internals.
  */
 export function evaluateCallApiPolicy(options: CallApiPolicyOptions): CallApiPolicyResult {
-  const { method, path, allowMutations, allowedPathPrefixes } = options;
-  if (!(path.startsWith('/api/v1/') || path.startsWith('/livez') || path.startsWith('/readyz'))) {
+  const { method, allowMutations, allowedPathPrefixes } = options;
+  const url = normaliseCallApiPath(options.path);
+  if (url === null) {
+    return {
+      allowed: false,
+      message: 'Path must be an absolute API path without dot segments or encoded separators.',
+    };
+  }
+  const pathname = url.split('?', 1)[0] ?? url;
+  if (
+    !(
+      pathname.startsWith('/api/v1/') ||
+      pathname.startsWith('/livez') ||
+      pathname.startsWith('/readyz')
+    )
+  ) {
     return { allowed: false, message: 'Path must start with /api/v1/, /livez, or /readyz' };
   }
   if (method !== 'GET' && !allowMutations) {
@@ -73,14 +132,14 @@ export function evaluateCallApiPolicy(options: CallApiPolicyOptions): CallApiPol
   }
   if (
     allowedPathPrefixes.length > 0 &&
-    !allowedPathPrefixes.some((prefix) => path.startsWith(prefix))
+    !allowedPathPrefixes.some((prefix) => pathname.startsWith(prefix))
   ) {
     return {
       allowed: false,
       message: 'Path is not in the MCP call_api allowlist for this deployment.',
     };
   }
-  return { allowed: true };
+  return { allowed: true, url };
 }
 
 /** Static descriptor for an MCP resource — used to register resources on the server and to render the OpenAPI page. */

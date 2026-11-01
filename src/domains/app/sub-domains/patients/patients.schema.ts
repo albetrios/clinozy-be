@@ -32,6 +32,44 @@ import {
 } from '@/domains/app/sub-domains/patients/patients.constants.js';
 
 /**
+ * The patient's links to its clinic's contact, home branch and lead (B2-5): each a composite key
+ * `(organization_id, <column>)` to the parent's `(organization_id, id)`, so a row cannot name
+ * another clinic's record, with the index its delete action uses
+ * (`20261101101100_tenant_composite_foreign_keys.sql`).
+ */
+function patientLinks(
+  table: Record<'organization_id' | 'contact_id' | 'home_branch_id' | 'lead_id', AnyPgColumn>,
+) {
+  return [
+    foreignKey({
+      name: 'patients_contact_fk',
+      columns: [table.organization_id, table.contact_id],
+      foreignColumns: [contacts.organization_id, contacts.id],
+    }).onDelete('restrict'),
+    index('idx_patients_organization_contact')
+      .on(table.organization_id, table.contact_id)
+      .where(sql`${table.contact_id} IS NOT NULL`),
+    foreignKey({
+      name: 'patients_home_branch_fk',
+      columns: [table.organization_id, table.home_branch_id],
+      foreignColumns: [branches.organization_id, branches.id],
+    }).onDelete('restrict'),
+    index('idx_patients_organization_home_branch')
+      .on(table.organization_id, table.home_branch_id)
+      .where(sql`${table.home_branch_id} IS NOT NULL`),
+    // The SQL says ON DELETE SET NULL ("lead_id"): organization_id is kept.
+    foreignKey({
+      name: 'patients_lead_fk',
+      columns: [table.organization_id, table.lead_id],
+      foreignColumns: [leads.organization_id, leads.id],
+    }).onDelete('set null'),
+    index('idx_patients_organization_lead')
+      .on(table.organization_id, table.lead_id)
+      .where(sql`${table.lead_id} IS NOT NULL`),
+  ];
+}
+
+/**
  * Drizzle table for `app.patients` — the clinical side of a contact: consents, allergies, usual
  * doctor, home branch, status (launch ROUTE #133, routes-final 7.A).
  *
@@ -54,12 +92,8 @@ export const patients = appSchema
       // The "PT-0412" of the patient list — per organization, never reused
       patient_number: integer('patient_number').notNull().default(0),
       // The person (P1)
-      contact_id: bigint('contact_id', { mode: 'number' })
-        .notNull()
-        .references(() => contacts.id, { onDelete: 'restrict' }),
-      home_branch_id: bigint('home_branch_id', { mode: 'number' })
-        .notNull()
-        .references(() => branches.id, { onDelete: 'restrict' }),
+      contact_id: bigint('contact_id', { mode: 'number' }).notNull(),
+      home_branch_id: bigint('home_branch_id', { mode: 'number' }).notNull(),
       types: text('types').array().notNull().default([]),
       status: varchar('status', { length: 8 }).notNull().default('new'),
       // Took a treatment (P4)
@@ -69,9 +103,7 @@ export const patients = appSchema
       follow_up_at: timestamp('follow_up_at', { withTimezone: true }),
       notes: text('notes'),
       // The lead they came from — set at the check-in that opened the file (P10)
-      lead_id: bigint('lead_id', { mode: 'number' }).references((): AnyPgColumn => leads.id, {
-        onDelete: 'set null',
-      }),
+      lead_id: bigint('lead_id', { mode: 'number' }),
       has_data_consent: boolean('has_data_consent').notNull().default(false),
       has_photo_consent: boolean('has_photo_consent').notNull().default(false),
       allergies: text('allergies').array().notNull().default([]),
@@ -80,15 +112,19 @@ export const patients = appSchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       deleted_at: timestamp('deleted_at', { withTimezone: true }),
       delete_reason: varchar('delete_reason', { length: 20 }),
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      uniqueIndex('idx_patients_organization_id_id').on(table.organization_id, table.id),
+      ...patientLinks(table),
       uniqueIndex('idx_patients_public_id').on(table.public_id),
       uniqueIndex('idx_patients_organization_patient_number').on(
         table.organization_id,

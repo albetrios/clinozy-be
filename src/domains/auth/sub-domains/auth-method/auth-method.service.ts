@@ -7,7 +7,14 @@ import {
   UnauthorizedError,
   ValidationError,
 } from '@/shared/errors/index.js';
-import { MAX_LINKED_AUTH_METHODS_PER_USER } from '@/shared/constants/security.constants.js';
+import {
+  ACCOUNT_LOCKOUT_MINUTES,
+  MAX_FAILED_LOGIN_ATTEMPTS,
+  MAX_LINKED_AUTH_METHODS_PER_USER,
+  MAX_PASSWORD_STEP_UP_ATTEMPTS,
+  PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS,
+} from '@/shared/constants/security.constants.js';
+import { incrementWithExpiryOnFirst } from '@/shared/utils/infrastructure/redis-counter.util.js';
 import type { Redis } from 'ioredis';
 import { isDisposableEmailBlocked } from '@/shared/utils/text/email.util.js';
 import { enforceMinimumDuration } from '@/shared/utils/security/anti-enumeration.util.js';
@@ -21,6 +28,8 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import {
   AUTH_EVENT,
+  type AccountSecurityNotice,
+  type AccountSecurityNoticePayload,
   type PasswordResetEmailPayload,
 } from '@/domains/auth/sub-domains/auth-method/events/auth.events.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
@@ -50,6 +59,9 @@ const PASSWORD_RESET_EXPIRES_IN_MINUTES = 60;
 
 /** Redis key prefix for the per-email password-reset send cooldown (anti-mail-bomb spacing). */
 const PASSWORD_RESET_COOLDOWN_KEY_PREFIX = 'auth:password_reset_cooldown:';
+
+/** Redis key prefix for the per-user (public id) password step-up attempt budget (A-3). */
+const PASSWORD_STEP_UP_ATTEMPT_KEY_PREFIX = 'auth:password_step_up_attempts:';
 
 /**
  * Auth-method types that can mint a session on their own (sec-A5). Used by
@@ -150,15 +162,22 @@ export class AuthMethodService {
    *   passkeys so a passkey-only user can still delete their last passkey), this counts passkeys —
    *   the account-claim guards must treat a passkey-only account as a real, non-bare account so
    *   takeover safety does not rely on the implicit "passkey ⇒ verified email" invariant.
+   *   A-7 — an `EMAIL_CODE` row on a still-unverified email is not counted: the first code sign-in
+   *   verifies the email, so that row was never used — it is what `POST /auth/email/send-code`
+   *   leaves behind for an address anyone can type, and counting it let a stranger's send-code block
+   *   the owner's OAuth sign-in.
    */
   async hasActiveLoginCredential(userPublicId: string): Promise<boolean> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
+    const isCountedMethod = (methodType: string): boolean =>
+      LOGIN_CAPABLE_METHOD_TYPES.has(methodType) &&
+      (user.is_email_verified || methodType !== AUTH_METHOD_TYPE.EMAIL_CODE);
     return withAppDatabaseContext({
       scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
       callback: async () => {
         const methods = await this.authMethodRepository.listByUserId(user.id);
-        if (methods.some((method) => LOGIN_CAPABLE_METHOD_TYPES.has(String(method.method_type)))) {
+        if (methods.some((method) => isCountedMethod(String(method.method_type)))) {
           return true;
         }
         const passkeys = await this.webauthnCredentialRepository.listActiveByUserId(user.id);
@@ -280,6 +299,75 @@ export class AuthMethodService {
       scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
       callback: () => this.verificationTokenRepository.invalidateAllByUser(user.id),
     });
+  }
+
+  /**
+   * Whether the user turned a login method off: they hold a revoked `methodType` row (of `provider`,
+   * for OAuth) and no active one.
+   *
+   * @remarks
+   * - **Algorithm:** one aggregate read of the user's `auth_methods` rows of that type, revoked ones
+   *   included, under the owner database context.
+   * - **Failure modes:** none — a user who never held the method reads `false`.
+   * - **Side effects:** none.
+   * - **Notes:** A-5 — removing the email-code or an OAuth method used to leave that login path
+   *   open (email-code login never looked at the method; OAuth re-linked a fresh row). The email-code
+   *   and OAuth sign-ins consult this and refuse a turned-off method. A user who never held the row
+   *   (a password signup signing in by email code) is unaffected.
+   */
+  async isLoginMethodTurnedOff({
+    userPublicId,
+    userId,
+    methodType,
+    provider,
+  }: {
+    userPublicId: string;
+    userId: number;
+    methodType: string;
+    provider?: string;
+  }): Promise<boolean> {
+    const state = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId }),
+      callback: () =>
+        this.authMethodRepository.findMethodRevocationState(userId, methodType, provider),
+    });
+    return state.hasRevoked && !state.hasActive;
+  }
+
+  /**
+   * Emails the account owner that their account changed — a new second factor or passkey, every
+   * other session signed out, the password changed — with a "this wasn't me" line.
+   *
+   * @remarks
+   * - **Algorithm:** resolves the owner's address, then emits
+   *   `AUTH_EVENT.ACCOUNT_SECURITY_NOTICE_REQUESTED`; the auth-method event handler records the
+   *   outbox email in `locale`.
+   * - **Failure modes:** none surfaced — best-effort: the change has already happened, so a missing
+   *   user or a failed enqueue is logged, never thrown.
+   * - **Side effects:** a `mail_outbox` row and its post-commit dispatch.
+   * - **Notes:** A-1 — brief access to the mailbox of a passwordless account could enroll a factor
+   *   or sign the owner out everywhere unseen; the notice tells the owner at once.
+   */
+  async sendAccountSecurityNotice({
+    userPublicId,
+    notice,
+    locale,
+  }: {
+    userPublicId: string;
+    notice: AccountSecurityNotice;
+    locale: SupportedLanguage;
+  }): Promise<void> {
+    try {
+      const user = await this.userService.findUserRecordByPublicId(userPublicId);
+      if (!user) return;
+      await eventBus.emit({
+        type: AUTH_EVENT.ACCOUNT_SECURITY_NOTICE_REQUESTED,
+        payload: { email: user.email, notice, locale } satisfies AccountSecurityNoticePayload,
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      logger.warn({ error, notice }, 'auth.account_security_notice.failed');
+    }
   }
 
   async findByProviderUserId({
@@ -638,10 +726,10 @@ export class AuthMethodService {
   }
 
   /**
-   * Re-verifies the caller's password for a step-up ("sudo") re-authentication, without
-   * mutating any state. Used by `POST /auth/step-up` so password users can open a short
-   * recent-step-up window before a sensitive credential mutation. Throws on a missing user,
-   * a passwordless account, or an incorrect password.
+   * Re-verifies the caller's password for a step-up ("sudo") re-authentication. Used by
+   * `POST /auth/step-up` so password users can open a short recent-step-up window before a
+   * sensitive credential mutation. Throws on a missing user, a passwordless account, an incorrect
+   * password, or a spent attempt budget.
    *
    * @remarks
    * MFA-enabled users are rejected with `ForbiddenError('errors:mfaStepUpRequired')` BEFORE
@@ -651,19 +739,71 @@ export class AuthMethodService {
    * stolen bearer into permanent password-only access. MFA users must step up via
    * `/auth/me/mfa/verify` (which records the same recent-step-up sentinel). The check fires
    * before `verifyPassword` to avoid a password-timing oracle for MFA users (sec-A1).
+   *
+   * A-3 — each attempt is counted up front against a per-user budget
+   * ({@link MAX_PASSWORD_STEP_UP_ATTEMPTS} per {@link PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS}),
+   * so concurrent guesses cannot overspend it; a wrong password also counts toward the login
+   * lockout ({@link UserService.registerFailedLoginAttempt}); the session that spends the budget is
+   * revoked (`errors:stepUpAttemptsExhausted`). A correct password clears the budget.
    */
   async verifyPasswordForStepUp(options: {
     userPublicId: string;
+    sessionPublicId: string;
     password: string;
   }): Promise<void> {
-    const { userPublicId, password } = options;
+    const { userPublicId, sessionPublicId, password } = options;
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
     if (user.is_mfa_enabled) {
       throw new ForbiddenError('errors:mfaStepUpRequired');
     }
     if (!user.password_hash) throw new UnauthorizedError('errors:passwordAuthNotEnabled');
+    const attemptKey = `${PASSWORD_STEP_UP_ATTEMPT_KEY_PREFIX}${user.public_id}`;
+    const attempts = await incrementWithExpiryOnFirst({
+      redis: this.redis,
+      key: attemptKey,
+      ttlSeconds: PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS,
+    });
+    if (attempts > MAX_PASSWORD_STEP_UP_ATTEMPTS) {
+      await this.revokeSessionAfterSpentStepUpBudget({ userPublicId, sessionPublicId });
+    }
     const { valid } = await verifyPassword({ plaintext: password, storedHash: user.password_hash });
-    if (!valid) throw new UnauthorizedError('errors:currentPasswordIncorrect');
+    if (!valid) {
+      await this.userService.registerFailedLoginAttempt({
+        public_id: user.public_id,
+        options: {
+          maxAttempts: MAX_FAILED_LOGIN_ATTEMPTS,
+          lockoutMinutes: ACCOUNT_LOCKOUT_MINUTES,
+        },
+      });
+      if (attempts === MAX_PASSWORD_STEP_UP_ATTEMPTS) {
+        await this.revokeSessionAfterSpentStepUpBudget({ userPublicId, sessionPublicId });
+      }
+      throw new UnauthorizedError('errors:currentPasswordIncorrect');
+    }
+    await this.redis.del(attemptKey);
+  }
+
+  /**
+   * Ends the session that spent the password step-up budget (A-3) and refuses the attempt.
+   * An already-revoked session is not an error.
+   */
+  private async revokeSessionAfterSpentStepUpBudget({
+    userPublicId,
+    sessionPublicId,
+  }: {
+    userPublicId: string;
+    sessionPublicId: string;
+  }): Promise<never> {
+    logger.warn(
+      { user_public_id: userPublicId, session_public_id: sessionPublicId },
+      'auth.step_up.password_attempts_exhausted',
+    );
+    try {
+      await this.authSessionService.revoke({ userPublicId, sessionPublicId });
+    } catch (error) {
+      if (!(error instanceof NotFoundError)) throw error;
+    }
+    throw new UnauthorizedError('errors:stepUpAttemptsExhausted');
   }
 }

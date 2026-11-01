@@ -17,5 +17,12 @@
   "invitationFallbackInviter": "Un miembro del equipo",
   "copyUrlPrompt": "O copia y pega esta URL en tu navegador:",
   "automatedFooter": "Este es un mensaje automático. No respondas a este correo.",
-  "notificationViewDetails": "Ver detalles"
+  "notificationViewDetails": "Ver detalles",
+  "securityNoticeFactorEnrolledSubject": "Se añadió un nuevo factor de inicio de sesión a tu cuenta",
+  "securityNoticeFactorEnrolledHtml": "<p>Se acaba de añadir una nueva aplicación de autenticación o passkey a tu cuenta.</p>",
+  "securityNoticeSessionsRevokedSubject": "Se cerraron tus otras sesiones",
+  "securityNoticeSessionsRevokedHtml": "<p>Se acaban de cerrar todas las demás sesiones de tu cuenta.</p>",
+  "securityNoticePasswordChangedSubject": "Tu contraseña se cambió",
+  "securityNoticePasswordChangedHtml": "<p>La contraseña de tu cuenta se acaba de cambiar.</p>",
+  "securityNoticeNotYouHtml": "<p><strong>¿No fuiste tú?</strong> Otra persona puede tener acceso a tu cuenta o a tu correo. Contacta con soporte de inmediato y revisa los métodos de inicio de sesión y las sesiones de tu cuenta.</p>"
 }

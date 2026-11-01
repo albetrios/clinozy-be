@@ -36,31 +36,27 @@ import { stock_purchases } from '@/domains/app/sub-domains/stock/stock-purchases
 import { tasks } from '@/domains/app/sub-domains/tasks/tasks.schema.js';
 
 /**
- * Every soft-deleting `app.*` table, children before parents — the order the deleted-record
- * purge erases them in, so a parent goes after the rows that named it (D38).
+ * The soft-deleting `app.*` tables the deleted-record purge erases, children before parents — the
+ * order it erases them in, so a parent goes after the rows that named it (D38).
  *
  * @remarks
- * - **Notes:** generated with the app tables. `app.branches` is not here — a branch is never
- *   deleted (D3, D16) — nor `app.patients` (never purged, P7), nor the tables that never soft-delete
- *   (`app.patient_treatments` — reversed, TR6; the append-only `app.patient_feedback_actions`,
- *   `app.payment_edits`, `app.day_close_events`, `app.stock_item_movements`, `app.stock_counts`,
- *   `app.task_owner_changes`; `app.supplier_credits` — a voided credit is kept, never purged, MD32;
- *   `app.task_rule_settings` — upserted; `app.day_closes` — opened and
- *   closed, B25; an invoice's lines and members, a purchase's lines and a count's lines, which go
- *   with it).
+ * - **Notes:** never a clinical or a financial table ({@link APP_RECORD_KEPT_TABLES} — kept for
+ *   good, deleted rows included, G2-4); pinned by `app-record-purge.policy.unit.test.ts`.
+ *   `app.branches` is not here — a branch is never deleted (D3, D16) — nor `app.patients` (never
+ *   purged, P7), nor the tables that never soft-delete (`app.patient_treatments` — reversed, TR6;
+ *   the append-only `app.patient_feedback_actions`, `app.payment_edits`, `app.day_close_events`,
+ *   `app.stock_item_movements`, `app.stock_counts`, `app.task_owner_changes`;
+ *   `app.supplier_credits` — a voided credit is kept, never purged, MD32;
+ *   `app.task_rule_settings` — upserted; `app.day_closes` — opened and closed, B25). A deleted
+ *   row a kept record still names (a contact with appointments, an offering on a bill, a medicine
+ *   on a sale) is skipped as blocked, run after run.
  */
 export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   // A task's owner changes go with it (append-only, `ON DELETE CASCADE`)
   { table: tasks, label: 'app.tasks' },
-  // A purchase's lines go with it; one whose movements still name it stays blocked (`RESTRICT`)
-  { table: stock_purchases, label: 'app.stock_purchases' },
   // An item with movement history stays blocked (`RESTRICT` — the ledger keeps it, S5)
   { table: stock_items, label: 'app.stock_items' },
   { table: stock_vendors, label: 'app.stock_vendors' },
-  // A voided sale goes before its invoice (`RESTRICT`); a sale with returns is never voided (MD19)
-  { table: medical_sales, label: 'app.medical_sales' },
-  // A cancelled order's lines go with it
-  { table: medical_purchase_orders, label: 'app.medical_purchase_orders' },
   // A medicine's batches and supplier prices go with it; one a bill line or a supplier credit
   // still names stays blocked (`RESTRICT`)
   { table: medicines, label: 'app.medicines' },
@@ -68,27 +64,14 @@ export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   { table: medical_reps, label: 'app.medical_reps' },
   { table: suppliers, label: 'app.suppliers' },
   { table: manufacturers, label: 'app.manufacturers' },
-  // A feedback action goes with its check-in or review (append-only, `ON DELETE CASCADE`)
+  // A feedback action goes with its review (append-only, `ON DELETE CASCADE`); the review's files
+  // are tombstoned with it, so the upload retention removes them from storage (G2-5)
   { table: patient_reviews, label: 'app.patient_reviews' },
-  { table: patient_check_ins, label: 'app.patient_check_ins' },
-  { table: pending_credits, label: 'app.pending_credits' },
-  // A payment edit goes with its payment (append-only); a credit note after the refund naming it
-  { table: payments, label: 'app.payments' },
-  { table: invoice_credit_notes, label: 'app.invoice_credit_notes' },
-  { table: patient_offering_suggestions, label: 'app.patient_offering_suggestions' },
-  { table: patient_offerings, label: 'app.patient_offerings' },
-  { table: invoices, label: 'app.invoices' },
-  { table: patient_reports, label: 'app.patient_reports' },
-  { table: patient_images, label: 'app.patient_images' },
   { table: prescription_kits, label: 'app.prescription_kits' },
-  { table: patient_prescriptions, label: 'app.patient_prescriptions' },
-  { table: patient_clinical_notes, label: 'app.patient_clinical_notes' },
-  { table: patient_diagnoses, label: 'app.patient_diagnoses' },
-  { table: appointments, label: 'app.appointments' },
   { table: contact_message_templates, label: 'app.contact_message_templates' },
   { table: leads, label: 'app.leads' },
   // Never `app.patients` (P7 — a patient file is only ever soft-deleted). A contact goes after the
-  // leads and appointments that name it (and its numbers with it); one with a patient file stays
+  // leads that name it (and its numbers with it); one with a patient file or an appointment stays
   // blocked (`ON DELETE RESTRICT`).
   { table: contacts, label: 'app.contacts' },
   { table: offers, label: 'app.offers' },
@@ -97,4 +80,46 @@ export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   { table: branch_machines, label: 'app.branch_machines' },
   { table: branch_rooms, label: 'app.branch_rooms' },
   { table: offering_groups, label: 'app.offering_groups' },
+];
+
+/** Why a soft-deleting table is kept for good: a patient's clinical record or the clinic's books. */
+export type AppRecordKeptKind = 'clinical' | 'financial';
+
+/**
+ * The soft-deleting `app.*` tables the deleted-record purge never erases — a deleted row stays,
+ * restorable, like a patient file (P7). The organization's `deleted_record_purge_days` does not
+ * apply to them (G2-4).
+ *
+ * @remarks
+ * - **Notes:** clinical — the visit, the notes, diagnoses, prescriptions, photos, reports,
+ *   check-ins and the treatment plan (`app.patient_treatments` is never deleted at all, TR6);
+ *   financial — bills, payments, credit notes, pending credits, the packages bought (the sessions
+ *   ledger), the medical sales and the purchases with their GST. Pinned by
+ *   `app-record-purge.policy.unit.test.ts`: none of them is in {@link APP_RECORD_TABLES}.
+ */
+export const APP_RECORD_KEPT_TABLES: readonly {
+  table: PgTable;
+  label: string;
+  kind: AppRecordKeptKind;
+}[] = [
+  { table: appointments, label: 'app.appointments', kind: 'clinical' },
+  { table: patient_clinical_notes, label: 'app.patient_clinical_notes', kind: 'clinical' },
+  { table: patient_diagnoses, label: 'app.patient_diagnoses', kind: 'clinical' },
+  { table: patient_prescriptions, label: 'app.patient_prescriptions', kind: 'clinical' },
+  { table: patient_images, label: 'app.patient_images', kind: 'clinical' },
+  { table: patient_reports, label: 'app.patient_reports', kind: 'clinical' },
+  { table: patient_check_ins, label: 'app.patient_check_ins', kind: 'clinical' },
+  {
+    table: patient_offering_suggestions,
+    label: 'app.patient_offering_suggestions',
+    kind: 'clinical',
+  },
+  { table: invoices, label: 'app.invoices', kind: 'financial' },
+  { table: payments, label: 'app.payments', kind: 'financial' },
+  { table: invoice_credit_notes, label: 'app.invoice_credit_notes', kind: 'financial' },
+  { table: pending_credits, label: 'app.pending_credits', kind: 'financial' },
+  { table: patient_offerings, label: 'app.patient_offerings', kind: 'financial' },
+  { table: medical_sales, label: 'app.medical_sales', kind: 'financial' },
+  { table: medical_purchase_orders, label: 'app.medical_purchase_orders', kind: 'financial' },
+  { table: stock_purchases, label: 'app.stock_purchases', kind: 'financial' },
 ];

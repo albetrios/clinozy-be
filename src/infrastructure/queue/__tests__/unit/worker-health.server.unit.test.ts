@@ -1,9 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import http from 'node:http';
 import net from 'node:net';
 import {
   markWorkerHealthNotReady,
   markWorkerHealthReady,
+  resetWorkerReadinessCacheForTests,
   startWorkerHealthServer,
   stopWorkerHealthServer,
 } from '@/infrastructure/queue/worker-runtime/worker-health.server.js';
@@ -40,7 +41,7 @@ vi.mock('@/infrastructure/observability/metrics/metrics.js', async (importOrigin
 });
 
 vi.mock('@/shared/utils/infrastructure/readiness-probes.util.js', () => ({
-  runDependencyReadinessProbes: vi.fn().mockResolvedValue({
+  getCachedDependencyReadinessProbes: vi.fn().mockResolvedValue({
     status: 'ok',
     database: 'connected',
     redis: 'connected',
@@ -48,6 +49,9 @@ vi.mock('@/shared/utils/infrastructure/readiness-probes.util.js', () => ({
     latencyMs: { database: 1, redis: 1, bullmq: 1 },
   }),
 }));
+
+const METRICS_SCRAPE_TOKEN = 'test-metrics-bearer-token-min-32-chars';
+const SCRAPE_AUTHORIZATION = `Bearer ${METRICS_SCRAPE_TOKEN}`;
 
 function getHealth(
   url: string,
@@ -104,6 +108,12 @@ describe('worker-health.server', () => {
     await startWorkerHealthServer();
   });
 
+  beforeEach(() => {
+    vi.stubEnv('METRICS_SCRAPE_TOKEN', METRICS_SCRAPE_TOKEN);
+    resetEnvCacheForTests();
+    resetWorkerReadinessCacheForTests();
+  });
+
   afterAll(async () => {
     markWorkerHealthNotReady();
     await stopWorkerHealthServer();
@@ -127,7 +137,7 @@ describe('worker-health.server', () => {
 
   it('returns 200 on /readyz after workers are marked ready', async () => {
     markWorkerHealthReady(3);
-    const response = await getHealth(readyUrl);
+    const response = await getHealth(readyUrl, { authorization: SCRAPE_AUTHORIZATION });
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body)).toMatchObject({
       status: 'ok',
@@ -161,7 +171,7 @@ describe('worker-health.server', () => {
     );
     vi.mocked(getQueuesWaitingJobCount).mockResolvedValueOnce(0);
     markWorkerHealthReady(3);
-    const response = await getHealth(readyUrl);
+    const response = await getHealth(readyUrl, { authorization: SCRAPE_AUTHORIZATION });
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body)).toMatchObject({
       status: 'ok',
@@ -177,7 +187,7 @@ describe('worker-health.server', () => {
     );
     vi.mocked(getQueuesWaitingJobCount).mockResolvedValueOnce(4);
     markWorkerHealthReady(3);
-    const response = await getHealth(readyUrl);
+    const response = await getHealth(readyUrl, { authorization: SCRAPE_AUTHORIZATION });
     expect(response.statusCode).toBe(503);
     expect(JSON.parse(response.body)).toMatchObject({
       status: 'stalled',
@@ -186,9 +196,44 @@ describe('worker-health.server', () => {
     });
   });
 
+  it('answers /readyz without the scrape token with the status only, no dependency or fleet detail (D-5)', async () => {
+    markWorkerHealthReady(3);
+    for (const authorization of [undefined, 'Bearer wrong-token-wrong-token-wrong-token']) {
+      resetWorkerReadinessCacheForTests();
+      const response = await getHealth(readyUrl, authorization ? { authorization } : undefined);
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.body)).toEqual({ status: 'ok', role: 'worker' });
+    }
+  });
+
+  it('keeps the 503 status code for an unauthenticated probe of an unready worker (D-5)', async () => {
+    markWorkerHealthNotReady();
+    const response = await getHealth(readyUrl);
+    expect(response.statusCode).toBe(503);
+    expect(JSON.parse(response.body)).toEqual({ status: 'starting', role: 'worker' });
+  });
+
+  it('serves a burst of /readyz from one cached probe round (D-5)', async () => {
+    const { readWorkerQueueHeartbeats } = await import(
+      '@/infrastructure/queue/worker-runtime/worker-queue-heartbeat.js'
+    );
+    const { getCachedDependencyReadinessProbes } = await import(
+      '@/shared/utils/infrastructure/readiness-probes.util.js'
+    );
+    vi.mocked(readWorkerQueueHeartbeats).mockClear();
+    vi.mocked(getCachedDependencyReadinessProbes).mockClear();
+    markWorkerHealthReady(3);
+
+    await Promise.all([getHealth(readyUrl), getHealth(readyUrl), getHealth(readyUrl)]);
+    await getHealth(readyUrl);
+
+    expect(getCachedDependencyReadinessProbes).toHaveBeenCalledTimes(1);
+    // One round reads the two heartbeat sets (every queue, the throughput queues) once each.
+    expect(readWorkerQueueHeartbeats).toHaveBeenCalledTimes(2);
+  });
+
   it('returns 401 on /metrics without bearer token when METRICS_SCRAPE_TOKEN is set', async () => {
     vi.stubEnv('METRICS_ENABLED', 'true');
-    vi.stubEnv('METRICS_SCRAPE_TOKEN', 'test-metrics-bearer-token-min-32-chars');
     resetEnvCacheForTests();
     markWorkerHealthReady(1);
 
@@ -197,15 +242,11 @@ describe('worker-health.server', () => {
   });
 
   it('returns Prometheus text on /metrics with valid bearer token', async () => {
-    const bearerToken = 'test-metrics-bearer-token-min-32-chars';
     vi.stubEnv('METRICS_ENABLED', 'true');
-    vi.stubEnv('METRICS_SCRAPE_TOKEN', bearerToken);
     resetEnvCacheForTests();
     markWorkerHealthReady(1);
 
-    const response = await getHealth(metricsUrl, {
-      authorization: `Bearer ${bearerToken}`,
-    });
+    const response = await getHealth(metricsUrl, { authorization: SCRAPE_AUTHORIZATION });
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain('nodejs_');
   });

@@ -38,10 +38,14 @@
       "mcp__be-codegraph__codegraph_files",
       "Bash(pnpm iteration*)",
       "Bash(pnpm db*)",
-      "Bash(pnpm exec *)",
+      "Bash(pnpm exec vitest *)",
+      "Bash(pnpm exec biome *)",
+      "Bash(pnpm exec tsc *)",
+      "Bash(pnpm exec knip *)",
+      "Bash(pnpm exec markdownlint-cli2 *)",
+      "Bash(pnpm exec commitlint *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)",
       "Bash(git switch *)",
       "Bash(gh run *)",
       "mcp__headroom__*",
@@ -53,6 +57,12 @@
       "mcp__github__issue_read",
       "mcp__github__actions_get",
       "mcp__github__actions_list"
+    ],
+    "ask": [
+      "Bash(git push)",
+      "Bash(git push *)",
+      "Bash(gh pr merge*)",
+      "mcp__github__merge_pull_request"
     ],
     "deny": [
       "Bash(git push --force *)",

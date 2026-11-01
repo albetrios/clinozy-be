@@ -158,7 +158,11 @@ function createMembershipWriteHandlers(service: MembershipService) {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const membershipId = readMembershipIdParam(request);
-      await service.revokeInvitation({ scope, membership_public_id: membershipId });
+      await service.revokeInvitation({
+        scope,
+        membership_public_id: membershipId,
+        options: membershipActionOptions(auth),
+      });
       await recordScopedAuditEvent({
         request,
         input: {
@@ -179,6 +183,7 @@ function createMembershipWriteHandlers(service: MembershipService) {
         scope,
         membership_public_id: membershipId,
         restored_by_user_public_id: getActingUserPublicId(auth),
+        options: membershipActionOptions(auth),
       });
       await recordScopedAuditEvent({
         request,

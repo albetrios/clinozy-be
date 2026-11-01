@@ -116,9 +116,11 @@ export const invoices = appSchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       deleted_at: timestamp('deleted_at', { withTimezone: true }),
       delete_reason: varchar('delete_reason', { length: 20 }),
@@ -278,13 +280,15 @@ export const invoice_items = appSchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [
-      index('idx_invoice_items_organization_id').on(table.organization_id),
+      uniqueIndex('idx_invoice_items_organization_id_id').on(table.organization_id, table.id),
       uniqueIndex('idx_invoice_items_public_id').on(table.public_id),
       // Deferrable in the init migration — a save renumbers kept lines (B12)
       unique('uq_invoice_items_invoice_line').on(table.invoice_id, table.line_number),
@@ -375,6 +379,7 @@ export const invoice_members = appSchema
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [

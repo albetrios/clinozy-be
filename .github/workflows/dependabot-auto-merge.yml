@@ -1,33 +1,44 @@
-# Enables squash auto-merge on a low-risk Dependabot PR (the `npm-non-major` group)
-# once a maintainer APPROVES it — the approval is the manual gate. The PR then merges
-# automatically when the required PR CI checks pass.
+# Enables squash auto-merge on a low-risk Dependabot PR (the `npm-non-major` group) once a
+# maintainer APPROVES it — the approval is the manual gate. The PR then merges automatically when
+# the required PR CI checks pass.
 #
-# Why approval-triggered: a maintainer's approval is the opt-in signal that arms
-# auto-merge, and this works in BOTH governance modes (see
-# docs/deployment/ci-cd/branch-protection.md). In personal mode (0 required approvals)
-# it is the only human gate; in team mode (1 required CODEOWNER approval) the same
-# approval doubles as the required review. Either way the PR merges automatically once
-# the required PR CI checks pass — no per-mode change to this workflow is needed.
-# Majors / security / github-actions / docker stay fully manual.
+# Step 2 of 2: dependabot-approval.yml (pull_request_review) signals an approval; this workflow
+# runs main's copy of itself (workflow_run), so a PR cannot rewrite it, and checks every condition
+# again from the GitHub API before it reads the release PAT — the triggering run is only a signal,
+# since a PR can rewrite dependabot-approval.yml or add a workflow of the same name:
+#   - the PR is Dependabot's, in the npm-non-major group, and its head is the approved commit;
+#   - an APPROVED review of that head by a reviewer whose author_association is OWNER, MEMBER or
+#     COLLABORATOR (H-3: any GitHub user may leave an approving review on a public repository).
+# The PAT lives in the development environment, which allows the main branch only (H-4); a
+# workflow_run job runs on main.
+#
+# Why approval-triggered: a maintainer's approval is the opt-in signal that arms auto-merge, and
+# this works in BOTH governance modes (see docs/deployment/ci-cd/branch-protection.md). In
+# personal mode (0 required approvals) it is the only human gate; in team mode (1 required
+# CODEOWNER approval) the same approval doubles as the required review. Either way the PR merges
+# automatically once the required PR CI checks pass — no per-mode change to this workflow is
+# needed. Majors / security / github-actions / docker stay fully manual.
 #
 # Prerequisite: the repo setting "Allow auto-merge" must be enabled
 # (Settings -> General -> Pull Requests -> Allow auto-merge).
 #
-# No third-party actions are used (keeps the action-pin gate satisfied); the
-# non-major classification uses the Dependabot group name from .github/dependabot.yml.
+# No third-party actions are used (keeps the action-pin gate satisfied); the non-major
+# classification uses the Dependabot group name from .github/dependabot.yml.
 
 name: Dependabot auto-merge
 
-on:
-  pull_request_review:
-    types: [submitted]
+on: # zizmor: ignore[dangerous-triggers] -- runs no PR code; every condition is read again from the API
+  workflow_run:
+    # Must match dependabot-approval.yml's `name:` exactly
+    # (src/tests/unit/ci/github-actions-workflow-run-references.policy.unit.test.ts).
+    workflows: ['Dependabot approval']
+    types: [completed]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
-  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  group: dependabot-auto-merge-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
 env:
@@ -38,26 +49,74 @@ jobs:
     name: Enable auto-merge for approved low-risk Dependabot updates
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # RELEASE_PLEASE_TOKEN is maintained as an ENVIRONMENT secret, so the job has
-    # to be scoped to that environment to resolve it; an unscoped job silently
-    # reads the repository-level copy instead, which nothing validates or
-    # rotates. `development` has no protection rules, so this adds no approval
-    # gate (same rationale as scheduled-release-guards.yml).
+    # RELEASE_PLEASE_TOKEN is an environment secret, so this job selects the `development`
+    # environment to read it; a workflow_run job runs on main, which that environment allows.
     environment: development
-    # Maintainer approved + Dependabot-authored + the non-major npm group only.
-    # `npm-major` does not contain the substring `npm-non-major`, so majors never match.
+    # contents and pull-requests: write — the squash merge, which the PAT performs; GITHUB_TOKEN is
+    # only the fallback when the PAT is absent, and it needs both.
+    permissions:
+      contents: write
+      pull-requests: write
     if: >-
-      github.event.review.state == 'approved' &&
-      github.event.pull_request.user.login == 'dependabot[bot]' &&
-      (
-        contains(github.event.pull_request.title, 'npm-non-major') ||
-        contains(github.event.pull_request.head.ref, 'npm-non-major')
-      )
+      github.event.workflow_run.event == 'pull_request_review' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     steps:
-      - name: Enable squash auto-merge
-        run: gh pr merge --auto --squash "$PR_URL"
+      - name: Check the pull request and its approval again
+        id: pull-request
         env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          gh pr list --repo "$REPOSITORY" --state open --head "$HEAD_BRANCH" --limit 5 \
+            --json number,url,headRefOid,headRefName,title,author,isCrossRepository > pulls.json
+          match="$(jq -c --arg sha "$HEAD_SHA" \
+            '[.[] | select(.headRefOid == $sha and (.isCrossRepository | not))] | first // empty' pulls.json)"
+          if [ -z "$match" ]; then
+            echo "::notice title=Auto-merge not armed::No open pull request has head ${HEAD_SHA} (pushed again since the approval?)."
+            echo "armed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          number="$(jq -r '.number' <<<"$match")"
+          # Maintainer approved + Dependabot-authored + the non-major npm group only.
+          # `npm-major` does not contain the substring `npm-non-major`, so majors never match.
+          if ! jq -e '.author.login == "app/dependabot" or .author.login == "dependabot[bot]"' <<<"$match" >/dev/null; then
+            echo "::notice title=Auto-merge not armed::#${number} is not Dependabot's."
+            echo "armed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! jq -e '(.title | contains("npm-non-major")) or (.headRefName | contains("npm-non-major"))' <<<"$match" >/dev/null; then
+            echo "::notice title=Auto-merge not armed::#${number} is not in the npm-non-major group."
+            echo "armed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # H-3: an approval of THIS head by an owner, organization member or collaborator — the
+          # latest review of each such reviewer on it, so a later "changes requested" withdraws it.
+          gh api --paginate "repos/${REPOSITORY}/pulls/${number}/reviews" --jq '.[]' > reviews.jsonl
+          approvals="$(jq -s --arg sha "$HEAD_SHA" '
+            [.[] | select(.commit_id == $sha and (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR"))
+                         and (.state == "APPROVED" or .state == "CHANGES_REQUESTED"))]
+            | group_by(.user.login) | map(max_by(.submitted_at)) | map(select(.state == "APPROVED")) | length' reviews.jsonl)"
+          if [ "$approvals" -lt 1 ]; then
+            echo "::notice title=Auto-merge not armed::#${number} has no approval of ${HEAD_SHA} by an owner, member or collaborator."
+            echo "armed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "armed=true"
+            echo "url=$(jq -r '.url' <<<"$match")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Enable squash auto-merge
+        if: steps.pull-request.outputs.armed == 'true'
+        # --match-head-commit: a push after the approval leaves the merge unarmed.
+        run: gh pr merge --auto --squash --match-head-commit "$HEAD_SHA" "$PR_URL"
+        env:
+          PR_URL: ${{ steps.pull-request.outputs.url }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           # PAT (falling back to github.token) so the eventual merge is
           # PAT-attributed and its push to main TRIGGERS post-merge CI. A
           # GITHUB_TOKEN merge produces no post-merge run — no SBOM, no release

@@ -30,6 +30,9 @@
 #   NODE_INSTALL_PREFIX (default /opt) — parent dir for node<major>
 #   NODE_LINK_USER_BIN  (default 1)    — 0 skips the ~/.local/bin links
 #
+# Checksum: the tarball must match NODE_SHA256_LINUX_<ARCH> in tool-versions.sh, pinned for
+# NODE_VERSION there, which must equal .nvmrc; a mismatch is refused (H-12).
+#
 # Fails FAST (set -euo pipefail): a setup-time install error should surface, not
 # leave a half-broken toolchain. Idempotent: re-running is a no-op once the
 # pinned version is present (Setup scripts re-run on cache rebuilds).
@@ -49,6 +52,15 @@ case "${version}" in
     ;;
 esac
 readonly version
+# shellcheck source=tool-install.lib.sh
+source "${repository_root}/tooling/setup/agent/tool-install.lib.sh"
+# Read from the file, not through pinned_version: a NODE_VERSION in the environment (Node's own
+# Docker images set one) is some other Node, never a trial of this pin.
+checksummed_version="$(sed -n 's/^NODE_VERSION=//p' "${TOOL_VERSIONS_FILE}" | head -1)"
+if [ "${checksummed_version}" != "${version}" ]; then
+  echo "install-node: .nvmrc pins ${version} but tool-versions.sh has checksums for NODE_VERSION=${checksummed_version:-none} — move both together." >&2
+  exit 1
+fi
 major="${version%%.*}"
 readonly target_dir="${INSTALL_PREFIX}/node${major}"
 
@@ -92,8 +104,8 @@ if [ -x "${target_dir}/bin/node" ] && [ "$("${target_dir}/bin/node" -v 2>/dev/nu
 fi
 
 case "$(uname -m)" in
-  x86_64) arch="x64" ;;
-  aarch64 | arm64) arch="arm64" ;;
+  x86_64) arch="x64" arch_key="X64" ;;
+  aarch64 | arm64) arch="arm64" arch_key="ARM64" ;;
   *)
     echo "install-node: unsupported architecture '$(uname -m)'." >&2
     exit 1
@@ -115,14 +127,18 @@ if ! { mkdir -p "${target_dir}" 2>/dev/null && [ -w "${target_dir}" ]; }; then
 fi
 
 readonly tarball="node-v${version}-linux-${arch}.tar.xz"
-readonly url="https://nodejs.org/dist/v${version}/${tarball}"
+readonly node_url="https://nodejs.org/dist/v${version}/${tarball}"
 
-echo "install-node: downloading ${url}"
+echo "install-node: downloading ${node_url}"
 temporary_directory="$(mktemp -d)"
-curl -fsSL "${url}" -o "${temporary_directory}/${tarball}"
+if ! download_verified "${node_url}" "${temporary_directory}/${tarball}" "$(pinned_version "NODE_SHA256_LINUX_${arch_key}")"; then
+  rm -r "${temporary_directory}"
+  echo "install-node: download failed or did not match its pinned SHA-256 — is nodejs.org allowed by the network policy?" >&2
+  exit 1
+fi
 
 tar -xJf "${temporary_directory}/${tarball}" -C "${target_dir}" --strip-components=1
 rm -r "${temporary_directory}"
 
-echo "install-node: installed Node $("${target_dir}/bin/node" -v) at ${target_dir}"
+echo "install-node: installed Node $("${target_dir}/bin/node" -v) at ${target_dir} (SHA-256 verified)"
 link_pinned_toolchain

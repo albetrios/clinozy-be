@@ -8,8 +8,11 @@ import {
   isNotNull,
   isNull,
   lt,
+  notExists,
+  or,
   sql as drizzleSql,
 } from 'drizzle-orm';
+import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
@@ -115,14 +118,65 @@ export class UploadRepository {
     return rows[0] ?? null;
   }
 
-  /** The organization's confirmed, live uploads among `file_keys` (any order; a key that is none is absent). */
+  /**
+   * Binds the organization's confirmed, live uploads among `fileKeys` to a record (C-2): each key
+   * takes the record on its first attach, and a key already bound to another record is left alone.
+   * Answers how many keys are now bound to `owner` — fewer than the distinct keys means one refused.
+   *
+   * @remarks
+   * - **Algorithm:** one guarded `UPDATE` — the key must be confirmed, live and of the organization,
+   *   and unbound or bound to `owner` already. Two writes racing for one unbound key serialize on the
+   *   row: the second sees it bound and matches nothing.
+   */
+  async bindKeysToRecord(options: {
+    organizationId: number;
+    fileKeys: readonly string[];
+    owner: { resource: string; publicId: string };
+  }): Promise<number> {
+    const keys = [...new Set(options.fileKeys)];
+    if (keys.length === 0) return 0;
+    const rows = await getRequestDatabase()
+      .update(uploads)
+      .set({
+        bound_resource: options.owner.resource,
+        bound_public_id: options.owner.publicId,
+        updated_at: databaseNowTimestamp,
+      })
+      .where(
+        and(
+          inArray(uploads.file_key, keys),
+          eq(uploads.organization_id, options.organizationId),
+          eq(uploads.status, UPLOAD_STATUS.UPLOADED),
+          isNull(uploads.deleted_at),
+          or(
+            isNull(uploads.bound_public_id),
+            and(
+              eq(uploads.bound_resource, options.owner.resource),
+              eq(uploads.bound_public_id, options.owner.publicId),
+            ),
+          ),
+        ),
+      )
+      .returning({ file_key: uploads.file_key });
+    return rows.length;
+  }
+
+  /**
+   * The organization's confirmed, live uploads among `file_keys` (any order; a key that is none is
+   * absent), with the record each is bound to.
+   */
   async findConfirmedByFileKeys(
     organization_id: number,
     file_keys: readonly string[],
-  ): Promise<Pick<UploadRow, 'file_key' | 'file_name'>[]> {
+  ): Promise<Pick<UploadRow, 'file_key' | 'file_name' | 'bound_resource' | 'bound_public_id'>[]> {
     if (file_keys.length === 0) return [];
     return getRequestDatabase()
-      .select({ file_key: uploads.file_key, file_name: uploads.file_name })
+      .select({
+        file_key: uploads.file_key,
+        file_name: uploads.file_name,
+        bound_resource: uploads.bound_resource,
+        bound_public_id: uploads.bound_public_id,
+      })
       .from(uploads)
       .where(
         and(
@@ -461,4 +515,43 @@ export async function hardDeleteUploadsByInternalIds(
     .where(inArray(uploads.id, ids))
     .returning({ id: uploads.id });
   return rows.length;
+}
+
+/**
+ * C-2 / G2-5: soft-deletes the uploads bound to a record that no longer exists — a record purged
+ * from its table — so the tombstone retention removes their objects too. A bound record still
+ * there, live or soft-deleted (restorable), keeps its files.
+ *
+ * @remarks
+ * - **Algorithm:** one `UPDATE` per bound resource: its live uploads whose `bound_public_id` names no
+ *   row of the resource's table (`NOT EXISTS`, a join-only read of that table).
+ * - **Failure modes:** a database error propagates (the job retries).
+ * - **Side effects:** sets `deleted_at` on the orphaned upload rows; no S3 call (the tombstone
+ *   retention deletes the objects).
+ */
+export async function tombstoneUploadsOfMissingRecords(
+  databaseHandle: WorkerDatabaseHandle,
+  bindings: Readonly<Record<string, { table: PgTable; publicId: AnyPgColumn }>>,
+): Promise<number> {
+  let tombstoned = 0;
+  for (const [resource, { table, publicId }] of Object.entries(bindings)) {
+    const rows = await databaseHandle
+      .update(uploads)
+      .set({ deleted_at: databaseNowTimestamp, updated_at: databaseNowTimestamp })
+      .where(
+        and(
+          isNull(uploads.deleted_at),
+          eq(uploads.bound_resource, resource),
+          notExists(
+            databaseHandle
+              .select({ one: drizzleSql`1` })
+              .from(table)
+              .where(eq(publicId, uploads.bound_public_id)),
+          ),
+        ),
+      )
+      .returning({ id: uploads.id });
+    tombstoned += rows.length;
+  }
+  return tombstoned;
 }

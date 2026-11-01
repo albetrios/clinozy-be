@@ -130,25 +130,36 @@ describe('Security: Auth public rate limit burst (429)', () => {
     expect(responses.filter((response) => response.statusCode === 429).length).toBeGreaterThan(0);
   });
 
+  /**
+   * The real composition: the route carries the per-IP STRICT_PUBLIC_RATE_LIMIT (`onRequest`) AND
+   * the per-email preHandler. Before the fix the per-email hook was an `app.rateLimit()` handler,
+   * which shares `@fastify/rate-limit`'s per-request "already ran" flag with the route's own limit
+   * — so it returned without counting and never fired.
+   */
   async function createPerEmailRouteApp() {
     mockEnv.RATE_LIMIT_RELAXED_CAPS = false;
     vi.resetModules();
-    const { STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS } = await import(
+    const { STRICT_PUBLIC_RATE_LIMIT } = await import(
       '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js'
+    );
+    const { createPerEmailRateLimitPreHandler } = await import(
+      '@/shared/middlewares/rate-limit/per-email-rate-limit.js'
     );
 
     const application = Fastify();
     await application.register(rateLimit, { global: false });
-    const perEmailRateLimit = application.rateLimit(STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS);
-    application.post('/auth/login', { preHandler: [perEmailRateLimit] }, async () => ({
-      data: { message: 'ok' },
-    }));
+    const perEmailRateLimit = createPerEmailRateLimitPreHandler(application);
+    application.post(
+      '/auth/login',
+      { ...STRICT_PUBLIC_RATE_LIMIT, preHandler: [perEmailRateLimit] },
+      async () => ({ data: { message: 'ok' } }),
+    );
     await application.ready();
     apps.push(application);
     return application;
   }
 
-  it('caps a single email at 5 attempts / window regardless of IP (6th returns 429)', async () => {
+  it('caps a single email at 5 attempts / window from varied IPs, behind the per-IP limit (6th returns 429)', async () => {
     const application = await createPerEmailRouteApp();
     const responses = [];
     for (let attempt = 0; attempt < 7; attempt += 1) {
@@ -156,14 +167,17 @@ describe('Security: Auth public rate limit burst (429)', () => {
         await application.inject({
           method: 'POST',
           url: '/auth/login',
-          // Vary the forwarded IP to prove the bucket is keyed by email, not IP.
-          headers: { 'x-forwarded-for': `198.51.100.${attempt}` },
+          // A fresh connection address per attempt: the per-IP bucket never fills, so only the
+          // per-email budget can refuse.
+          remoteAddress: `198.51.100.${attempt + 1}`,
           payload: { email: 'victim@example.com', password: 'x' },
         }),
       );
     }
-    expect(responses.slice(0, 5).every((response) => response.statusCode === 200)).toBe(true);
-    expect(responses.filter((response) => response.statusCode === 429).length).toBeGreaterThan(0);
+    expect(responses.slice(0, 5).map((response) => response.statusCode)).toEqual([
+      200, 200, 200, 200, 200,
+    ]);
+    expect(responses.slice(5).map((response) => response.statusCode)).toEqual([429, 429]);
   });
 
   it('keeps per-email buckets independent — a fresh email is not throttled by another', async () => {
@@ -172,12 +186,14 @@ describe('Security: Auth public rate limit burst (429)', () => {
       await application.inject({
         method: 'POST',
         url: '/auth/login',
+        remoteAddress: `203.0.113.${attempt + 1}`,
         payload: { email: 'noisy@example.com', password: 'x' },
       });
     }
     const otherEmailResponse = await application.inject({
       method: 'POST',
       url: '/auth/login',
+      remoteAddress: '203.0.113.200',
       payload: { email: 'quiet@example.com', password: 'x' },
     });
     expect(otherEmailResponse.statusCode).toBe(200);

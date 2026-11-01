@@ -244,9 +244,10 @@ export function createMcpServer({
             safeHeaders[key] = value;
           }
         }
+        // C-3: inject the normalised url the policy checked, never the raw path.
         const result = await inject({
           method: data.method,
-          url: data.path,
+          url: policy.url,
           payload: data.body,
           headers: safeHeaders,
         });
@@ -308,6 +309,25 @@ export function createMcpTransportAndServer({
   return { transport, server };
 }
 
+/**
+ * Closes a per-request MCP transport and server (D-9). Stateless mode builds a fresh pair for
+ * every request; left open, each one keeps its connected protocol and listeners alive.
+ *
+ * @remarks
+ * - **Algorithm:** closes the transport and the server together and waits for both to settle.
+ * - **Failure modes:** none thrown — a close that rejects is logged at `warn` and swallowed, so a
+ *   response `close` listener can call it without an unhandled rejection.
+ * - **Side effects:** ends the transport's streams and the server's protocol connection.
+ */
+export async function closeMcpTransportAndServer(pair: McpTransportAndServer): Promise<void> {
+  const outcomes = await Promise.allSettled([pair.transport.close(), pair.server.close()]);
+  for (const outcome of outcomes) {
+    if (outcome.status === 'rejected') {
+      logger.warn({ error: outcome.reason }, 'mcp.transport_and_server.close_failed');
+    }
+  }
+}
+
 type McpRouteOptions = {
   name: string;
   version: string;
@@ -320,7 +340,8 @@ type McpRouteOptions = {
  * - GET: SSE stream for client connection flow (returns an event-stream; may stay idle in JSON response mode).
  *
  * Stateless mode (sessionIdGenerator: undefined) requires a new transport per request;
- * the SDK rejects reuse. So we create a new transport and server per request.
+ * the SDK rejects reuse. So we create a new transport and server per request, and close both
+ * when the response closes ({@link closeMcpTransportAndServer}).
  */
 export async function registerMcpRouteHandlers({
   app,
@@ -394,12 +415,18 @@ export async function registerMcpRouteHandlers({
         },
       });
 
-    const { transport, server } = createMcpTransportAndServer({
+    const pair = createMcpTransportAndServer({
       options: {
         ...options,
         inject: requestInject,
       },
       sdk,
+    });
+    const { transport, server } = pair;
+    // D-9: the pair lives for this one request — close both when the response closes (sent,
+    // failed, or the client went away), registered before connect so no path skips it.
+    nodeResponse.once('close', () => {
+      void closeMcpTransportAndServer(pair);
     });
     await server.connect(transport as Parameters<McpServerInstance['connect']>[0]);
     await transport.handleRequest(nodeRequest, nodeResponse, parsedBody);

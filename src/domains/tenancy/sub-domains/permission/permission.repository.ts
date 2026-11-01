@@ -11,7 +11,11 @@ import {
   getRequestDatabase,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
-import { eq, and, isNull, sql as drizzleSql } from 'drizzle-orm';
+import {
+  ACTIVE_ORGANIZATION_STATUS,
+  INACTIVE_ORGANIZATION_OWNER_PERMISSION_CODES,
+} from '@/domains/tenancy/sub-domains/organization/organization-capability.js';
+import { eq, and, inArray, isNull, or, sql as drizzleSql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
 /**
@@ -32,7 +36,9 @@ import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
  * `app.current_user_public_id`. A direct join would therefore return zero rows under
  * the non-superuser `clinozy_be_app` role and silently strip every permission
  * (403 on all organization PERM-gated routes). The resolver also filters
- * `deleted_at IS NULL`, so a soft-deleted user resolves to `null` → empty set.
+ * `deleted_at IS NULL`, so a soft-deleted user resolves to `null` → empty set. An organization
+ * that is not `ACTIVE` (suspended, archived) resolves an empty set for everyone but its owner, who
+ * keeps {@link INACTIVE_ORGANIZATION_OWNER_PERMISSION_CODES} to reactivate it.
  */
 export class PermissionRepository {
   async findAll(limit = DEFAULT_REPOSITORY_LIST_LIMIT) {
@@ -86,6 +92,17 @@ export class PermissionRepository {
           isNull(memberships.deleted_at),
           isNull(roles.deleted_at),
           isNull(organizations.deleted_at),
+          // B2-3: a suspended or archived organization grants nothing — except to its owner, who
+          // keeps what reading and reactivating it takes.
+          or(
+            eq(organizations.status, ACTIVE_ORGANIZATION_STATUS),
+            and(
+              eq(organizations.owner_user_id, memberships.user_id),
+              inArray(role_permissions.permission_code, [
+                ...INACTIVE_ORGANIZATION_OWNER_PERMISSION_CODES,
+              ]),
+            ),
+          ),
         ),
       );
 

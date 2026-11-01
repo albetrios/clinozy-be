@@ -11,9 +11,11 @@ export function extractRouteSnippet(content: string, methodIndex: number): strin
   const nextRouteMatch = rest
     .slice(1)
     .match(/\n\s*[a-zA-Z][\w$]*\.(get|post|patch|put|delete)\s*[(<]/);
-  const endIndex =
-    nextRouteMatch?.index !== undefined ? nextRouteMatch.index + 1 : Math.min(rest.length, 500);
-  return rest.slice(0, endIndex);
+  if (nextRouteMatch?.index !== undefined) return rest.slice(0, nextRouteMatch.index + 1);
+  // The file's last route: up to the close of its registration call (`    );`), so a long
+  // `preHandler` list never pushes its `config` (the idempotency flag) out of the snippet.
+  const callEnd = rest.search(/\n\s*\);/);
+  return rest.slice(0, callEnd === -1 ? Math.min(rest.length, 500) : callEnd + 1);
 }
 
 export function classifyAccess(snippet: string, permissionMap: Map<string, string>): RouteAccess {

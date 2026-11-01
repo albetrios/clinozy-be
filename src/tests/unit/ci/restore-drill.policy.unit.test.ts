@@ -98,7 +98,7 @@ describe('restore drill automation policy', () => {
       'scheduled-weekly-restore-smoke.yml',
     ]) {
       const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
-      const migrateIndex = workflow.indexOf('run: pnpm db:migrate');
+      const migrateIndex = workflow.indexOf('pnpm --silent db:migrate');
       const advanceIndex = workflow.indexOf('pnpm --silent db:sequences:advance');
       const smokeIndex = workflow.indexOf('run: pnpm db:restore:smoke');
 
@@ -106,6 +106,28 @@ describe('restore drill automation policy', () => {
       expect(advanceIndex, workflowFileName).toBeGreaterThan(migrateIndex);
       expect(smokeIndex, workflowFileName).toBeGreaterThan(advanceIndex);
     }
+  });
+
+  // The same leak outside the drills: the Railway deploy prepares the environment's real
+  // database (`pnpm db:seed`: migrate, then the reference rows), and its log is public too.
+  it("keeps the deploy's database step from printing a Postgres message (H-13)", () => {
+    const workflow = readFileSync(
+      join(ROOT, '.github/workflows/reusable-railway-deploy.yml'),
+      'utf8',
+    );
+    const steps = workflow.split(/\n(?= {6}- name: )/);
+    const runOf = (step: string) => /\n {8}run: (\|\n[\s\S]*|.*)/.exec(step)?.[1] ?? '';
+    const databaseSteps = steps.filter((step) =>
+      /\bpnpm (?:--silent )?db:(?:seed|migrate)\b/.test(runOf(step)),
+    );
+    expect(databaseSteps.map((step) => /- name: (.+)/.exec(step)?.[1])).toEqual([
+      'Prepare the database (migrations, then the reference rows)',
+    ]);
+    const run = runOf(databaseSteps[0] ?? '');
+    expect(run).toContain('pnpm --silent db:seed 2> "$RUNNER_TEMP/db-seed.stderr"');
+    expect(run).not.toMatch(/\bcat\b|db-seed\.stderr"?\s*$|>&2/m);
+    expect(run).not.toMatch(/--verbose|--debug|set -x/);
+    expect(run).toContain('::error title=Database preparation failed::');
   });
 
   describe('runs end to end on a public repository without leaking production', () => {
@@ -185,6 +207,62 @@ describe('restore drill automation policy', () => {
           'pnpm --silent db:sequences:advance | tail -n 1',
         );
         expect(workflow, workflowFileName).not.toContain('run: pnpm db:sequences:advance');
+      }
+    });
+
+    it('prints no query output or row data from the copy (H-13)', () => {
+      // The copy is production's and this repository's Actions logs are public. Each step that
+      // can reach the copy prints only what is known to carry no row: the migration names (the
+      // runner's stderr — a Postgres message can quote a stored value — stays on the runner), the
+      // count of advanced sequences, and the smoke's summary lines with the app at LOG_LEVEL warn.
+      // No step runs a query of its own.
+      for (const workflowFileName of drillWorkflowFileNames) {
+        const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
+        const steps = workflow.split(/\n(?= {6}- name: )/);
+        const reachCopy = steps.filter((step) => step.includes('steps.neon_drill.outputs.'));
+        const runOf = (step: string) => /\n {8}run: (\|\n[\s\S]*|.*)/.exec(step)?.[1] ?? '';
+        const named = (name: string) => reachCopy.find((step) => step.includes(`- name: ${name}`));
+        expect(
+          reachCopy.map((step) => /- name: (.+)/.exec(step)?.[1]),
+          workflowFileName,
+        ).toEqual(
+          expect.arrayContaining([
+            'Run migrations on restored branch',
+            'Advance id sequences on restored branch',
+            'Restore smoke on restored database',
+          ]),
+        );
+        expect(runOf(named('Run migrations on restored branch') ?? '')).toContain(
+          'pnpm --silent db:migrate 2> "$RUNNER_TEMP/db-migrate.stderr"',
+        );
+        expect(runOf(named('Run migrations on restored branch') ?? '')).not.toMatch(
+          /\bcat\b|db-migrate\.stderr"?\s*$|>&2/m,
+        );
+        expect(named('Restore smoke on restored database'), workflowFileName).toContain(
+          'LOG_LEVEL: warn',
+        );
+        for (const step of reachCopy) {
+          const name = /- name: (.+)/.exec(step)?.[1] ?? '';
+          const run = runOf(step);
+          expect(run, `${workflowFileName}: ${name}`).not.toMatch(
+            /\bpsql\b|\bpg_dump\b|\bSELECT\b/i,
+          );
+          expect(run, `${workflowFileName}: ${name}`).not.toMatch(/--verbose|--debug|set -x/);
+        }
+      }
+      // The two drill scripts print a database error only as its SQLSTATE, constraint and table.
+      for (const script of [
+        'src/scripts/ops/db-restore-smoke.ts',
+        'src/scripts/ops/db-sequences-advance.ts',
+      ]) {
+        const source = readFileSync(join(ROOT, script), 'utf8');
+        expect(source, script).toContain('sanitizeDatabaseError(error)');
+        expect(source, script).toContain(
+          "console.error('Database connection error:', describeFailure(error))",
+        );
+        expect(source, script).not.toContain("'Database connection error', error)");
+        expect(source, script).not.toContain('error instanceof Error ? error.message : error');
+        expect(source, script).toContain('console.error(describeFailure(error));');
       }
     });
 

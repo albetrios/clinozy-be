@@ -29,6 +29,8 @@ export interface ResolveAccessTokenRoleInput {
   email: string;
   status: string;
   isEmailVerified: boolean;
+  /** Whether the account has an enrolled MFA factor — `super_admin` is never granted without one (A-2). */
+  isMfaEnabled: boolean;
 }
 
 /**
@@ -36,9 +38,11 @@ export interface ResolveAccessTokenRoleInput {
  *
  * @remarks
  * The `GLOBAL_ADMIN_EMAILS` allowlist is a break-glass mechanism: a listed email
- * is only elevated to `super_admin` when the account is `ACTIVE` **and** has a
- * verified email, so a misconfigured list or an unverified/suspended account
- * cannot silently obtain platform-wide privileges. Every `super_admin`
+ * is only elevated to `super_admin` when the account is `ACTIVE`, has a
+ * verified email **and** has an enrolled MFA factor (A-2), so a misconfigured list,
+ * an unverified/suspended account or a single-factor account cannot silently obtain
+ * platform-wide privileges; `requireRole` further admits a `super_admin` only on a
+ * session that proved the second factor. Every `super_admin`
  * issuance is logged (`auth.global_admin.super_admin_issued`) for break-glass
  * visibility. Non-admin accounts receive `user` when `ACTIVE`, otherwise no role.
  */
@@ -46,10 +50,11 @@ export function resolveAccessTokenRoleForUser({
   email,
   status,
   isEmailVerified,
+  isMfaEnabled,
 }: ResolveAccessTokenRoleInput): GlobalRole | undefined {
   const globalRole = resolveGlobalRoleForEmail(email);
   if (globalRole) {
-    if (status === 'ACTIVE' && isEmailVerified) {
+    if (status === 'ACTIVE' && isEmailVerified && isMfaEnabled) {
       logger.warn(
         { email: email.trim().toLowerCase(), role: globalRole },
         'auth.global_admin.super_admin_issued',
@@ -57,7 +62,7 @@ export function resolveAccessTokenRoleForUser({
       return globalRole;
     }
     logger.warn(
-      { email: email.trim().toLowerCase(), status, isEmailVerified },
+      { email: email.trim().toLowerCase(), status, isEmailVerified, isMfaEnabled },
       'auth.global_admin.super_admin_denied_unverified_or_inactive',
     );
   }

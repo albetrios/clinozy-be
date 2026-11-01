@@ -1,7 +1,9 @@
 import {
   findTombstonedUploadsBefore,
   hardDeleteUploadsByInternalIds,
+  tombstoneUploadsOfMissingRecords,
 } from '@/domains/upload/upload.repository.js';
+import { UPLOAD_BOUND_RECORD_TABLES } from '@/domains/upload/upload-bound-records.js';
 import { runGlobalRetentionWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
 import { getDefaultS3ObjectStorageAdapter } from '@/infrastructure/storage/s3-adapter.js';
@@ -25,7 +27,8 @@ const PURGE_BATCH_SIZE = 500;
  * - **Failure modes:** a failed S3 delete keeps the row for the next run — deleting it would leave
  *   an object nothing references, user content kept past its deletion date. An open S3 circuit
  *   ends the run early. Database errors bubble to BullMQ; deleted pages stay deleted.
- * - **Side effects:** deletes S3 objects, then hard-deletes from `upload.uploads`. No events.
+ * - **Side effects:** tombstones the uploads of records purged since the last run (G2-5), then
+ *   deletes S3 objects and hard-deletes from `upload.uploads`. No events.
  * - **Notes:** re-runnable; `objectStorage` is injectable for tests.
  */
 export async function runUploadTombstoneRetentionJob(
@@ -39,6 +42,14 @@ export async function runUploadTombstoneRetentionJob(
     { retentionDays, cutoffDate: cutoff.toISOString() },
     'upload-tombstone-retention.starting',
   );
+
+  // G2-5: an upload whose record was purged is tombstoned first, so its object goes too
+  const orphaned = await runGlobalRetentionWorkerJob((databaseHandle) =>
+    tombstoneUploadsOfMissingRecords(databaseHandle, UPLOAD_BOUND_RECORD_TABLES),
+  );
+  if (orphaned > 0) {
+    logger.info({ orphaned }, 'upload-tombstone-retention.orphanedTombstoned');
+  }
 
   const result = await purgeRowsAfterTheirObjects({
     objectStorage,

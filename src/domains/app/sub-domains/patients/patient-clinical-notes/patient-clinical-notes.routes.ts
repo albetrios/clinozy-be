@@ -87,12 +87,13 @@ export function patientClinicalNotesRoutes(
         preHandler: [
           requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
           requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_DELETE),
         ],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Delete a clinical note',
           description:
-            "Deletes a wrong clinical note with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Restorable until the organization's purge window ends (D38). Requires patient:update and patient:clinical_record:read (P14).",
+            'Deletes a wrong clinical note with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Restorable at any time — a clinical record is never purged (G2-4). Requires patient:update, patient:clinical_record:read (P14) and patient:delete (B1-2).',
           tags: ['Patient file'],
           params: patientClinicalNotesIdParamsDto,
           querystring: recordDeleteQuerySchema,
@@ -107,12 +108,13 @@ export function patientClinicalNotesRoutes(
         preHandler: [
           requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
           requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_DELETE),
         ],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Restore a clinical note',
           description:
-            "Undoes a clinical note's delete. A live note is a 409 `record_not_deleted`. Requires patient:update and patient:clinical_record:read (P14).",
+            "Undoes a clinical note's delete. A live note is a 409 `record_not_deleted`. Requires patient:update, patient:clinical_record:read (P14) and patient:delete (B1-2).",
           tags: ['Patient file'],
           params: patientClinicalNotesIdParamsDto,
         },

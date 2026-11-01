@@ -12,6 +12,11 @@ const ROOT = process.cwd();
 const read = (path: string): string => readFileSync(join(ROOT, path), 'utf8');
 const pinFile = readFileSync(TOOL_VERSIONS_PATH, 'utf8');
 const pins = parseToolVersions(pinFile);
+/**
+ * The pins of the release downloads that are not agent tools: Node (`.nvmrc`'s copy), gh and the
+ * Railway CLI the deploy installs.
+ */
+const VERIFIED_DOWNLOAD_VERSION_KEYS = ['NODE_VERSION', 'GH_VERSION', 'RAILWAY_VERSION'];
 
 /**
  * Locks in pinned agent tooling: one file (`tooling/setup/agent/tool-versions.sh`) holds
@@ -36,9 +41,13 @@ describe('agent tool versions policy', () => {
     }
   });
 
-  it('no pin is orphaned — each *_VERSION key belongs to a tool in AGENT_TOOLS', () => {
+  it('no pin is orphaned — each *_VERSION key belongs to a tool in AGENT_TOOLS or a verified download', () => {
+    // Node, gh and Railway are release downloads the scripts verify (H-2, H-12), not agent tools: the
+    // banner and `--outdated` leave them out (src/tests/unit/ci/pinned-installs.policy.unit.test.ts).
     const versionKeys = Object.keys(pins).filter((key) => key.endsWith('_VERSION'));
-    expect(versionKeys.sort()).toEqual(AGENT_TOOLS.map((tool) => tool.versionKey).sort());
+    expect(versionKeys.sort()).toEqual(
+      [...AGENT_TOOLS.map((tool) => tool.versionKey), ...VERIFIED_DOWNLOAD_VERSION_KEYS].sort(),
+    );
   });
 
   it('each installer reads its version from the pin file and never hardcodes one', () => {

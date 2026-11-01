@@ -94,12 +94,22 @@ jobs:
 
       # Migrations take the direct endpoint (their advisory lock needs one backend); the app pools
       # take the pooled one, as in production.
+      # A Postgres error message can quote a stored value (`invalid input syntax for type integer:
+      # "<value>"`), the copy is production's and this repository's Actions logs are public
+      # (H-13): the migration runner's stderr stays on the runner, and a failure names only the
+      # step that failed. Its stdout is the applied migrations' names.
       - name: Run migrations on restored branch
         env:
           DATABASE_URL: ${{ steps.neon_drill.outputs.application_database_url }}
           DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.maintenance_database_url }}
           DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.migration_database_url }}
-        run: pnpm db:migrate
+        run: |
+          set -euo pipefail
+          if ! pnpm --silent db:migrate 2> "$RUNNER_TEMP/db-migrate.stderr"; then
+            failed_step="$(sed -n 's/^✗ \([a-z ]*\):.*/\1/p' "$RUNNER_TEMP/db-migrate.stderr" | head -n 1)"
+            echo "::error title=Migrations failed on the restored copy::the ${failed_step:-database} step failed. Its database message is withheld from this public log (it can quote a production value); reproduce on a restore branch (docs/process/backup-drills.md)."
+            exit 1
+          fi
 
       # The DR runbook's step after migrating (docs/process/dr-runbook.md): move every id sequence
       # past what the lost window issued. The smoke below then writes rows with the jumped ids.
@@ -128,6 +138,9 @@ jobs:
           DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.maintenance_database_url }}
           DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.migration_database_url }}
           TEST_MODE: 'true'
+          # The booted app logs warnings and errors only (H-13): no request lines from a copy of
+          # production in a public log. A database error in them is sanitized (C-1).
+          LOG_LEVEL: warn
           CAPTCHA_PROVIDER: disabled
           RESEND_API_KEY: re_test_contract_fixture_key
           EMAIL_FROM_ADDRESS: noreply@example.com

@@ -37,9 +37,9 @@ One code set (launch T8): `membership:read|create|update|delete`; every `POST` t
 | `GET /tenancy/organization/memberships/{membership_id}` | `membership:read` | live or ended (D58) |
 | `PATCH /tenancy/organization/memberships/{membership_id}` | `membership:update` | live: `status` `active` ↔ `suspended` (T10), `role_ids`, profile; ended: `display_name` only (K6, D58); `expected_updated_at` (T14) |
 | `DELETE /tenancy/organization/memberships/{membership_id}?reason=&note=` | `membership:delete` | soft delete with `delete_reason` (+ `delete_note` for `other`) |
-| `POST /tenancy/organization/memberships/{membership_id}/restore` | `membership:delete` | undo a removal; 409 when live, rejoined or no seat; API keys stay revoked |
+| `POST /tenancy/organization/memberships/{membership_id}/restore` | `membership:delete` | undo a manager's removal; 409 when live, rejoined or no seat, and `membership_not_restorable` when the person left, deleted their account or declined, or the invite expired or was revoked; 403 when the roles hold a code you lack; API keys stay revoked |
 | `GET /tenancy/organization/memberships/{membership_id}/permissions` | `membership:read` | `{ permission_codes }` — every code of every role held (T15) |
-| `DELETE /tenancy/organization/memberships/{membership_id}/invitation` | `membership:delete` | revoke the pending invite; the invited membership ends (`not_needed`) |
+| `DELETE /tenancy/organization/memberships/{membership_id}/invitation` | `membership:delete` | revoke the pending invite; the invited membership ends (`not_needed`); role ordering as for a removal |
 | `POST /tenancy/organization/memberships/{membership_id}/invitation/resend` | `membership:update` | new token and expiry, an expired invite too (T11); returns the invitation (+ the dev-only `debug_invitation_token`, ROUTE #164) |
 
 ## Response shape
@@ -69,6 +69,15 @@ from the row; other rows have `invitation: null`. Status values are lowercase (T
   the clinic's doctor): a `role_ids` that keeps their main role first is taken, through the same
   grant guard as any member's (the caller must hold every code of every role in the set — so in
   practice the owner sets their own). Their staff profile stays editable.
+- **Ownership transfer moves the Owner role**: `POST /organization/transfer-ownership` flips
+  `owner_user_id`, makes the owner's main role (the locked Owner role) the new owner's main role —
+  their previous main role stays as an extra — and moves the former owner to Admin (or the optional
+  `former_owner_role_id`, never the Owner role), in one transaction; both permission caches are
+  purged after commit (B2-1).
+- **A refused add provisions nothing**: the team, role, grant and seat checks run before the
+  invitee's login is found or created, and again inside the write (B2-7).
+- **Restore is a manager's undo only**: it runs role ordering and the grant guard over the roles it
+  brings back (B2-2) and refuses an end only the person can undo (B2-6).
 - **Accept is gated on proven email control**: the accept route requires authentication, an email
   **matching** the invitee, **and a verified email** (`403 errors:invitationRequiresVerifiedEmail`
   otherwise). This stops a forwarded invite token from joining the organization.

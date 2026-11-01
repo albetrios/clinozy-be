@@ -12,7 +12,10 @@ import { claimApiKeyLastUsedWrite } from './organization-api-key-last-used.throt
 import type { OrganizationApiKeyRepository } from './organization-api-key.repository.js';
 import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import type { PermissionRepository } from '@/domains/tenancy/sub-domains/permission/permission.repository.js';
-import { assertCallerCanGrantPermissionCodes } from '@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js';
+import {
+  assertCallerCanGrantPermissionCodes,
+  assertCallerHoldsMemberPermissionCodes,
+} from '@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js';
 import type {
   OrganizationApiKeyOutput,
   CreateOrganizationApiKeyResult,
@@ -28,6 +31,17 @@ import {
   ORGANIZATION_API_KEY_PREFIX_DISPLAY_LENGTH,
   ORGANIZATION_API_KEY_RAW_SECRET_BYTE_LENGTH,
 } from '@/shared/constants/limits.constants.js';
+
+/**
+ * What an API-key mutation knows of an API-key caller: its scopes stand in for held permissions.
+ *
+ * @remarks
+ * - **Notes:** absent for a user caller, whose held set is read from the database; used by the
+ *   role ordering over another member's key (B2-11).
+ */
+export interface OrganizationApiKeyActionOptions {
+  callerApiKeyScopes?: readonly string[] | undefined;
+}
 
 function generateApiKey(): string {
   return `ak_${randomBytes(ORGANIZATION_API_KEY_RAW_SECRET_BYTE_LENGTH).toString('hex')}`;
@@ -194,11 +208,13 @@ export class OrganizationApiKeyService {
     api_key_public_id,
     body,
     updated_by_user_public_id,
+    options,
   }: {
     scope: OrganizationPrincipalDatabaseScope;
     api_key_public_id: string;
     body: unknown;
     updated_by_user_public_id: string | undefined;
+    options?: OrganizationApiKeyActionOptions | undefined;
   }): Promise<OrganizationApiKeyOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateUpdateOrganizationApiKey(body);
@@ -210,6 +226,12 @@ export class OrganizationApiKeyService {
         if (!organization) throw new NotFoundError('Organization');
         const row = await this.apiKeyRepository.findByPublicId(api_key_public_id, organization.id);
         if (!row) throw new NotFoundError('API key');
+        await this.assertCallerOutranksKeyCreator({
+          organizationPublicId: organization_public_id,
+          createdByUserId: row.created_by_user_id,
+          callerUserPublicId: updated_by_user_public_id,
+          callerApiKeyScopes: options?.callerApiKeyScopes,
+        });
         if (parsed.status === 'ACTIVE' && row.status !== 'ACTIVE') {
           await this.assertCanReactivate({
             organizationPublicId: organization_public_id,
@@ -257,12 +279,59 @@ export class OrganizationApiKeyService {
     });
   }
 
+  /**
+   * Role ordering for another member's key (B2-11): changing, rotating or revoking a key someone
+   * else created takes holding every code its creator holds now — a lower-ranked manager cannot
+   * revoke the owner's or an Admin's keys. A caller's own key, and a key whose creator is gone
+   * (it no longer authenticates), are not checked. MUST run inside the organization's context.
+   *
+   * @remarks
+   * - **Failure modes:** `ForbiddenError('errors:cannotManageMemberWithPermissionsNotHeld')`.
+   * - **Notes:** the creator's codes are read from the database, never the permission cache; an API
+   *   key caller's held set is its scopes.
+   */
+  private async assertCallerOutranksKeyCreator(options: {
+    organizationPublicId: string;
+    createdByUserId: number | null;
+    callerUserPublicId: string | undefined;
+    callerApiKeyScopes: readonly string[] | undefined;
+  }): Promise<void> {
+    if (options.createdByUserId === null) return;
+    const creatorUserPublicId = await this.organizationRepository.resolveUserPublicIdByInternalId(
+      options.createdByUserId,
+    );
+    if (creatorUserPublicId === null || creatorUserPublicId === options.callerUserPublicId) return;
+    const creatorPermissionCodes =
+      await this.authorizationService.resolveUserOrganizationPermissionsFromDatabase({
+        userPublicId: creatorUserPublicId,
+        organizationPublicId: options.organizationPublicId,
+      });
+    await assertCallerHoldsMemberPermissionCodes({
+      authorizationService: this.authorizationService,
+      callerUserPublicId: options.callerUserPublicId,
+      callerApiKeyScopes: options.callerApiKeyScopes,
+      organizationPublicId: options.organizationPublicId,
+      memberPermissionCodes: creatorPermissionCodes,
+    });
+  }
+
+  /**
+   * Revokes (soft-deletes) a key of the organization.
+   *
+   * @remarks
+   * - **Algorithm:** inside the organization context — the live key, role ordering over its creator
+   *   ({@link OrganizationApiKeyService.assertCallerOutranksKeyCreator}), then the soft delete.
+   * - **Failure modes:** `NotFoundError('Organization' | 'API key')`; `ForbiddenError` when the
+   *   key's creator holds a code the caller does not (B2-11).
+   */
   async delete({
     scope,
     api_key_public_id,
+    options,
   }: {
     scope: OrganizationPrincipalDatabaseScope;
     api_key_public_id: string;
+    options?: OrganizationApiKeyActionOptions | undefined;
   }): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
     return withAppDatabaseContext({
@@ -271,6 +340,14 @@ export class OrganizationApiKeyService {
         const organization =
           await this.organizationRepository.findByPublicId(organization_public_id);
         if (!organization) throw new NotFoundError('Organization');
+        const row = await this.apiKeyRepository.findByPublicId(api_key_public_id, organization.id);
+        if (!row) throw new NotFoundError('API key');
+        await this.assertCallerOutranksKeyCreator({
+          organizationPublicId: organization_public_id,
+          createdByUserId: row.created_by_user_id,
+          callerUserPublicId: scope.userPublicId,
+          callerApiKeyScopes: options?.callerApiKeyScopes,
+        });
         const deleted = await this.apiKeyRepository.softDelete(api_key_public_id, organization.id);
         if (!deleted) throw new NotFoundError('API key');
       },
@@ -337,6 +414,13 @@ export class OrganizationApiKeyService {
           organization.id,
         );
         if (!existing) throw new NotFoundError('API key');
+        // Rotating retires the key, so it takes the same role ordering as a revoke (B2-11).
+        await this.assertCallerOutranksKeyCreator({
+          organizationPublicId: organization_public_id,
+          createdByUserId: existing.created_by_user_id,
+          callerUserPublicId: created_by_user_public_id,
+          callerApiKeyScopes: undefined,
+        });
         // Atomic guard against a concurrent-rotation race: softDelete only retires a not-yet-deleted
         // key (WHERE deleted_at IS NULL) and returns null if another rotate/revoke already won. Only
         // the rotation that wins the retire mints the single replacement; the loser conflicts rather

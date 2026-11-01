@@ -70,8 +70,10 @@ The gate ([`tooling/sonar/sonar-gate.ts`](../../../tooling/sonar/sonar-gate.ts))
    one, mints a token, saves both to `.env.local`). Idempotent afterwards.
 3. **Scans** via the `sonar-scanner-cli` container.
 4. **Waits** for the server to finish processing the report.
-5. **Reports** every unresolved issue + hotspot and **exits 1** (blocking the push) if there is
-   at least one; exits 0 when clean.
+5. **Reports** every unresolved issue and every security hotspot — each with its rule, file and
+   line (`formatFindings` in `tooling/sonar/sonar-gate.ts`; never the token) — and **exits 1**
+   (blocking the push) if there is at least one; exits 0 when clean. A hotspot query SonarQube
+   cannot answer stops the gate too (it used to count as zero).
 
 ### No bypass
 

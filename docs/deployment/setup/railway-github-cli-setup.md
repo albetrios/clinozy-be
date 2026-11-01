@@ -31,8 +31,9 @@ flowchart LR
 ## Step 1: Install CLIs (Railway, GitHub)
 
 ```bash
-npm i -g @railway/cli
-# or: brew install railway
+brew install railway
+# or, on Linux, the version the deploy runs (pinned, SHA-256-verified):
+#   sudo bash tooling/ci/install-railway-cli.sh
 
 brew install gh
 

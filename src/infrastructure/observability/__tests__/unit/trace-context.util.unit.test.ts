@@ -52,6 +52,42 @@ describe('runWithPropagatedTraceContext — error + tracestate branches', () => 
     expect(workerSpan?.events.some((event) => event.name === 'exception')).toBe(true);
   });
 
+  it('records a database error on the span without its statement or bound values (C-1)', async () => {
+    const marker = 'PATIENT-NAME-MARKER';
+    const driverError = Object.assign(
+      new Error('insert or update on table "patients" violates foreign key constraint'),
+      { code: '23503', severity: 'ERROR', constraint: 'patients_lead_fk', table: 'patients' },
+    );
+    const queryError = Object.assign(
+      new Error(`Failed query: update app.patients set name = $1\nparams: ${marker}`),
+      { query: 'update app.patients set name = $1', params: [marker], cause: driverError },
+    );
+
+    const tracer = trace.getTracer('test');
+    await tracer.startActiveSpan('http.request', async (parentSpan) => {
+      const carrier = captureTraceContextForPropagation();
+      await expect(
+        runWithPropagatedTraceContext({
+          carrier,
+          spanName: 'worker.database-failure',
+          callback: async () => {
+            throw queryError;
+          },
+        }),
+      ).rejects.toBe(queryError);
+      parentSpan.end();
+    });
+
+    const workerSpan = spanExporter
+      .getFinishedSpans()
+      .find((span) => span.name === 'worker.database-failure');
+    expect(workerSpan).toBeDefined();
+    const recorded = JSON.stringify({ status: workerSpan?.status, events: workerSpan?.events });
+    expect(recorded).toContain('23503');
+    expect(recorded).not.toContain(marker);
+    expect(recorded).not.toContain('update app.patients');
+  });
+
   it('propagates tracestate through the carrier when present', async () => {
     const carrier = {
       traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',

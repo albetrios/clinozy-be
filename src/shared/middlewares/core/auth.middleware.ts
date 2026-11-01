@@ -9,6 +9,11 @@ import { resolveGlobalRoleForEmail } from '@/shared/utils/auth/global-admin-role
 import { applyApiKeyAuthentication } from '@/shared/middlewares/security/api-key-auth.middleware.js';
 import { PRINCIPAL_SCOPE } from '@/infrastructure/database/contexts/database-context.js';
 import { attachRequestI18nHelpers } from '@/shared/middlewares/core/i18n.middleware.js';
+import {
+  recordFailedAuthentication,
+  refuseWhenFailedAuthenticationBudgetSpent,
+  requestPresentsCredential,
+} from '@/shared/middlewares/rate-limit/failed-authentication-rate-limit.js';
 
 function getBearerToken(request: FastifyRequest): string {
   const authorizationHeader = request.headers.authorization;
@@ -63,6 +68,9 @@ async function rederiveSuperAdminRole({
   // closed for any non-active OR unverified account (defense in depth alongside the session-layer
   // status check).
   if (user.status !== 'ACTIVE' || !user.is_email_verified) return undefined;
+  // A-2: the minting side grants super_admin only with an enrolled MFA factor; a factor removed
+  // since the token was minted downgrades the claim here.
+  if (!user.is_mfa_enabled) return GLOBAL_ROLES.USER;
   const currentGlobalRole = resolveGlobalRoleForEmail(user.email);
   if (currentGlobalRole === GLOBAL_ROLES.SUPER_ADMIN) {
     return GLOBAL_ROLES.SUPER_ADMIN;
@@ -71,12 +79,37 @@ async function rederiveSuperAdminRole({
   return GLOBAL_ROLES.USER;
 }
 
-async function authenticate(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
-  if (!request.auth) {
+/**
+ * Runs the API-key then bearer-token authentication inside the per-address failed-authentication
+ * budget (D-2): a credentialed request from an address that has spent it gets 429 before any
+ * credential check, and every 401 a presented credential earns is counted. A request that sends no
+ * credential is not an attempt and is not counted; harnesses without the rate-limit middleware
+ * (no `failedAuthenticationRateLimit` decorator) authenticate unmetered.
+ */
+async function authenticateWithinFailedAuthenticationBudget(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const rateLimit = requestPresentsCredential(request)
+    ? request.server.failedAuthenticationRateLimit
+    : undefined;
+  if (rateLimit) await refuseWhenFailedAuthenticationBudgetSpent({ request, reply, rateLimit });
+  try {
     const apiKeyAuthenticated = await applyApiKeyAuthentication(request);
     if (!apiKeyAuthenticated) {
       await authenticateWithBearerToken(request);
     }
+  } catch (error) {
+    if (rateLimit && error instanceof UnauthorizedError) {
+      await recordFailedAuthentication({ request, reply, rateLimit });
+    }
+    throw error;
+  }
+}
+
+async function authenticate(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (!request.auth) {
+    await authenticateWithinFailedAuthenticationBudget(request, reply);
   }
   // Single attach point for every authentication path (C2): scope + the
   // claim-derived request.organizationId, then the organization default locale
@@ -185,7 +218,7 @@ export function attachRequestPrincipalScope(request: FastifyRequest): void {
  *   and re-attach the request i18n helpers with it.
  * - **Failure modes:** none surfaced — locale resolution errors fall back to the
  *   default locale inside the settings service.
- * - **Side effects:** may rebind `request.t` / `request.language` / `request.i18n`.
+ * - **Side effects:** may rebind `request.t` / `request.language`.
  */
 async function applyOrganizationDefaultLocale(request: FastifyRequest): Promise<void> {
   if (request.headers['accept-language']) return;
@@ -195,11 +228,7 @@ async function applyOrganizationDefaultLocale(request: FastifyRequest): Promise<
   if (!organizationSettingsService) return; // minimal entrypoints / unit harnesses without tenancy wiring
   const organizationDefaultLocale =
     await organizationSettingsService.resolveDefaultLocaleForOrganization(organizationPublicId);
-  attachRequestI18nHelpers({
-    request,
-    req: request as unknown as Parameters<typeof attachRequestI18nHelpers>[0]['req'],
-    organizationDefaultLocale,
-  });
+  attachRequestI18nHelpers({ request, organizationDefaultLocale });
 }
 
 const authMiddleware: FastifyPluginAsync = async (app) => {

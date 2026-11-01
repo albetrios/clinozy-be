@@ -30,7 +30,7 @@ src/infrastructure/
     scheduler.ts              # Central BullMQ repeatable-job registry (cron index for retention workers)
     queue.constants.ts        # Shared queue names / constants
     queue-dashboard.ts        # Bull-Board dashboard wiring (/admin/queues)
-    worker-runtime/           # Worker tuning + lifecycle: worker-options.ts, worker-processor.util.ts, worker-close.util.ts, worker-registration.registry.ts, worker-health.server.ts, scheduler-registry-audit.ts
+    worker-runtime/           # Worker tuning + lifecycle: worker-options.ts, worker-processor.util.ts, worker-close.util.ts (buildWorkerHandle), worker-failure-sanitizer.util.ts (a failed job's Redis record holds no bound value), worker-registration.registry.ts, worker-health.server.ts, scheduler-registry-audit.ts
     dlq/                      # Dead-letter subsystem: dead-letter.ts (per-source `<queue>-dlq` + final-retry Sentry), dead-letter.repository.ts/.schema.ts, dlq-auto-retry.*, dlq-replay.util.ts, poison-job.util.ts
     commit-dispatch/          # Post-commit dispatch recovery: commit-dispatch.executor.ts/.store.ts, commit-dispatch-recovery.worker.ts/.processor.ts
   mail/

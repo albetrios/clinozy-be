@@ -289,6 +289,8 @@ export class PaymentsRepository extends BaseRecordRepository {
       .where(
         and(
           eq(invoices.id, options.invoiceId),
+          // A deleted invoice owes nothing — money never moves onto one (G2-1).
+          isNull(invoices.deleted_at),
           sql`${paid} >= 0`,
           sql`${refunded} >= 0`,
           sql`${paid} + ${refunded} <= ${invoices.total}`,

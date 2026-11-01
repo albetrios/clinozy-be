@@ -55,6 +55,32 @@ export const MAX_WEBAUTHN_CREDENTIALS_PER_USER = 20;
 export const ACCOUNT_LOCKOUT_MINUTES = 30;
 
 /**
+ * Password step-up attempts (`POST /auth/step-up` with a password) one user may make in a
+ * {@link PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS} window.
+ *
+ * @remarks
+ * A-3 — the step-up re-verifies the password of a caller who already holds a session, so without
+ * a budget a stolen session is an unlimited online password oracle. Each wrong password also
+ * counts toward {@link MAX_FAILED_LOGIN_ATTEMPTS}, and the session that spends the budget is
+ * revoked.
+ */
+export const MAX_PASSWORD_STEP_UP_ATTEMPTS = 5;
+
+/** Fixed window of the per-user password step-up budget ({@link MAX_PASSWORD_STEP_UP_ATTEMPTS}). */
+export const PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS = 15 * 60;
+
+/**
+ * How long a second factor enrolled under an email-code step-up window stays provisional (72 h).
+ *
+ * @remarks
+ * A-1 — brief access to the mailbox of a passwordless account opens an email-code step-up, which
+ * can enroll a factor. Until this period has passed — and never on the session that enrolled it —
+ * an MFA step-up with that factor opens only a weak window, so it cannot revoke the owner's
+ * sessions or remove their credentials; the owner is emailed about the enrollment meanwhile.
+ */
+export const PROVISIONAL_FACTOR_PERIOD_SECONDS = 72 * 60 * 60;
+
+/**
  * Maximum concurrent active (non-revoked, non-expired) sessions per user.
  *
  * @remarks
@@ -84,6 +110,12 @@ export const IP_FAILED_LOGIN_THRESHOLD = 50;
 
 /** Window of the per-IP failed-login counter (seconds), fixed from the IP's first failure. */
 export const IP_FAILED_LOGIN_WINDOW_SECONDS = 15 * 60;
+
+/**
+ * How many leading bits of an IPv6 address one rate-limit bucket covers: a /64, the smallest
+ * allocation an ISP hands a single customer site (D-3 — see `rateLimitIpKey`).
+ */
+export const RATE_LIMIT_IPV6_SUBNET_PREFIX_LENGTH = 64;
 
 /**
  * Grace window (ms) during which the refresh compare-and-swap also accepts the immediately-previous
