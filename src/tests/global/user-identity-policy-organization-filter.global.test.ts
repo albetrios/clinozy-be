@@ -229,8 +229,11 @@ describe('Global: user-identity policy tables are read with an organization filt
     ],
     ['logs', 'audit/audit.schema.js', 'audit.logs'],
   ])('detects an unfiltered join on %s', (identifier, schemaPath, key) => {
+    // The alias prefix sits in a constant: an alias import written out with a template path
+    // survives tsc-alias (it cannot resolve the path) and trips `pnpm build:check`.
+    const domainsAlias = '@/domains/';
     const source = [
-      `import { ${identifier}, other } from '@/domains/${schemaPath}';`,
+      `import { ${identifier}, other } from '${domainsAlias}${schemaPath}';`,
       'class Repo {',
       '  async listForUser(user_id: number) {',
       `    return getRequestDatabase().select().from(other).leftJoin(${identifier}, eq(${identifier}.user_id, user_id));`,
