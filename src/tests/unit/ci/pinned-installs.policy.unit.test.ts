@@ -122,8 +122,10 @@ describe('pinned installs (H-12)', () => {
     ['runs-on: ubuntu-latest', false],
     ['  for tool in node npm npx corepack pnpm pnpx; do', false],
     ['  value=$(npx --yes some-tool --flag)', true],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the shell variable, asserted verbatim
     ['            docker push "${API_IMAGE}:latest"', false],
     ['        run: npm install -g @railway/cli', true],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the shell variable, asserted verbatim
     ['  npm install -g "${package}" >&2 2>&1', false],
     ['npm install --global --ignore-scripts netlify-cli@27.13.0', false],
   ])('reads %s as unpinned: %s', (line, unpinned) => {
