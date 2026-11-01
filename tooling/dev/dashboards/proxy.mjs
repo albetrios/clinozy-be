@@ -16,13 +16,15 @@
 //
 // The hub UI is ./hub.html (read per request — edit it live, no restart).
 // Env (optional): PROXY_PORT (3010), API_PORT (PORT from .env.local, else 3000),
-//                 DEMO_EMAIL, DEMO_PASSWORD.
+//                 DEMO_EMAIL, DEMO_PASSWORD, DEMO_TOTP_SECRET.
 
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { generate as generateTotpCode } from 'otplib';
 import { parseCommandLine } from '../../setup/common/script.ts';
+import { resolveDemoAdminTotpSecret } from '../demo-admin-totp.ts';
 
 parseCommandLine({ args: process.argv.slice(2) });
 
@@ -63,6 +65,9 @@ const METRICS_TOKEN = envVal('METRICS_SCRAPE_TOKEN');
 // (src/scripts/seed/ensure-demo-admin.ts) so the seeded password matches what we submit here.
 const DEMO_EMAIL = process.env.DEMO_EMAIL || 'demo@example.com';
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'DemoPassword123!';
+// A platform admin has an enrolled TOTP factor and needs an MFA-verified session (A-2): the seed
+// enrolls this secret, and login() completes POST /auth/mfa/login with a code computed from it.
+const DEMO_TOTP_SECRET = resolveDemoAdminTotpSecret(process.env);
 const WORKER_PORT = 9090;
 const SONAR_PORT = 9000;
 const STUDIO_PORT = 4983;
@@ -98,26 +103,45 @@ function upstream(options, body) {
   });
 }
 
-async function login() {
-  const res = await upstream(
+function authPost(path, payload) {
+  return upstream(
     {
       host: TARGET_HOST,
       port: TARGET_PORT,
       method: 'POST',
-      path: '/api/v1/auth/login',
+      path,
       headers: { 'content-type': 'application/json', 'x-captcha-bypass': 'true' },
     },
-    Buffer.from(JSON.stringify({ email: DEMO_EMAIL, password: DEMO_PASSWORD })),
+    Buffer.from(JSON.stringify(payload)),
   );
-  let token = null;
+}
+
+function answerData(res) {
   try {
-    const data = JSON.parse(res.body.toString());
-    token = data?.data?.access_token ?? data?.access_token ?? null;
+    const parsed = JSON.parse(res.body.toString());
+    return parsed?.data ?? parsed ?? null;
   } catch {
-    /* fall through to error below */
+    return null;
   }
+}
+
+async function login() {
+  const res = await authPost('/api/v1/auth/login', { email: DEMO_EMAIL, password: DEMO_PASSWORD });
+  let data = answerData(res);
+  let lastResponse = res;
+  // A platform admin answers mfa_required: complete it with the seeded TOTP secret (A-2).
+  if (data?.mfa_required && data.mfa_session_token) {
+    lastResponse = await authPost('/api/v1/auth/mfa/login', {
+      mfa_session_token: data.mfa_session_token,
+      totp_code: await generateTotpCode({ secret: DEMO_TOTP_SECRET }),
+    });
+    data = answerData(lastResponse);
+  }
+  const token = data?.access_token ?? null;
   if (!token) {
-    throw new Error(`login failed (status ${res.status}): ${res.body.toString().slice(0, 200)}`);
+    throw new Error(
+      `login failed (status ${lastResponse.status}): ${lastResponse.body.toString().slice(0, 200)}`,
+    );
   }
   adminToken = token;
   return token;

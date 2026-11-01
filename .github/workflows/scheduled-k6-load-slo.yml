@@ -91,6 +91,11 @@ jobs:
       # DEMO_PASSWORD. Such a token lives 5 minutes by default, and the admin scenario runs about 10
       # minutes after the refresh step that mints it. CI-only: the same 15 minutes as a user token.
       GLOBAL_ADMIN_ACCESS_TOKEN_EXPIRY_SECONDS: '900'
+      # A platform admin needs an enrolled MFA factor and an MFA-verified session (A-2). The demo-admin
+      # seed enrolls a TOTP factor with this secret, and tool:admin-token completes POST
+      # /auth/mfa/login with a code computed from it. A CI-only fixture for this throwaway database,
+      # like DEMO_PASSWORD; the seed refuses any non-local database.
+      DEMO_TOTP_SECRET: NM3C23TJM5UHI3DZFVQWI3LJNYWXI33UOAWWM2LYOR2XEZI # gitleaks:allow
       # CI-only fixtures, the Vitest harness's. fe-full-surface starts a Google sign-in, which answers
       # 302 to the authorize URL (string work, no outbound call) only once a provider is configured.
       OAUTH_GOOGLE_CLIENT_ID: test-google-client-id
@@ -128,7 +133,9 @@ jobs:
 
       - name: Seed the super_admin the admin scenarios sign in as
         # Creates DEMO_EMAIL with DEMO_PASSWORD (the job's demo password) as an active member of the
-        # demo organization. GLOBAL_ADMIN_EMAILS (the test-env export) makes its token super_admin.
+        # demo organization. GLOBAL_ADMIN_EMAILS (the test-env export) makes it a platform admin, so
+        # the seed also enrolls its TOTP factor with DEMO_TOTP_SECRET (job env) — without one,
+        # sign-in never grants super_admin (A-2).
         run: pnpm db:seed:demo-admin
         env:
           DEMO_EMAIL: ops@example.com

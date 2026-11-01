@@ -68,7 +68,7 @@ pnpm db:seed:stripe-catalog --dry-run     # say what it would create; write noth
 
 ## Failure modes
 
-- **Hosted / production `DATABASE_URL`** → `assertBulkSeedAllowed` throws before any write (override only with `ALLOW_BULK_SEED=1`), in the bulk seed, `pnpm db:seed:full` and `pnpm db:seed:demo-admin` (H-11). The demo clinic's `--fresh` asks it before deleting the clinic.
+- **Hosted / production `DATABASE_URL`** → `assertBulkSeedAllowed` throws before any write (override only with `ALLOW_BULK_SEED=1`), in the bulk seed, `pnpm db:seed:full` and `pnpm db:seed:demo-admin` (H-11). The demo clinic's `--fresh` asks it before deleting the clinic. `pnpm db:seed:demo-admin` also enrolls a TOTP factor (`seedTotpFactor`, `DEMO_TOTP_SECRET` or the local default in `tooling/dev/demo-admin-totp.ts`) when `DEMO_EMAIL` is on `GLOBAL_ADMIN_EMAILS` — a platform admin needs one for `super_admin` (A-2) — so this known secret, like the demo password, only ever reaches a local or test database.
 - **Demo clinic records fail mid-way** → they roll back together (one transaction in the clinic's context). The logins, organization and memberships written before them stay, and `--fresh` replaces them.
 - **Counts exceed `HARD_CAP`** → fatal config error pointing at the out-of-scope COPY path.
 - **Unknown `BULK_PROFILE` / invalid integer env / dependency cycle in `dependsOn`** → throws during config resolution or `orderModules`.
