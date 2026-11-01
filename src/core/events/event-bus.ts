@@ -96,14 +96,35 @@ export class EventBus {
   }
 
   /**
+   * Removes the in-process "durable tasks pending" marker for `requestId` and reports whether it
+   * was set (D-10). Called when a request's response closes unfinished (the client left, or the
+   * socket timed out): a handler that never answers
+   * never reaches {@link flushOnCommit}, and its marker would otherwise stay in the process-wide set
+   * for the life of the process. The durable Redis tasks stay put; a later flush of the same
+   * request drains them when told `durableTasksPending`, else the recovery sweeper does.
+   *
+   * @remarks
+   * - **Side effects:** mutates the module-level marker set only; no I/O.
+   */
+  clearCommitDispatchMarker(requestId: string): boolean {
+    return pendingCommitDispatchRequestIds.delete(requestId);
+  }
+
+  /**
    * Runs durable Redis-backed tasks for `requestId`, then any in-memory tasks queued via
    * `onCommit` for the current async context. Called from the request `onResponse` hook, after
-   * every unit of work has committed.
+   * every unit of work has committed. `durableTasksPending` drains the durable tasks even when the
+   * marker is gone — set by the request lifecycle when an unfinished close already cleared it
+   * ({@link clearCommitDispatchMarker}).
    */
-  async flushOnCommit(options?: { requestId?: string }): Promise<void> {
+  async flushOnCommit(options?: {
+    requestId?: string;
+    durableTasksPending?: boolean;
+  }): Promise<void> {
     const requestId = options?.requestId;
-    if (requestId !== undefined && pendingCommitDispatchRequestIds.has(requestId)) {
-      pendingCommitDispatchRequestIds.delete(requestId);
+    const markerWasSet =
+      requestId !== undefined && pendingCommitDispatchRequestIds.delete(requestId);
+    if (requestId !== undefined && (markerWasSet || options?.durableTasksPending === true)) {
       try {
         const durableTasks = await consumeCommitDispatchTasks({ requestId });
         for (const { task, raw } of durableTasks) {

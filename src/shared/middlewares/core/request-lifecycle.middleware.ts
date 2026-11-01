@@ -8,6 +8,34 @@ import { idempotencyOnResponse } from './idempotency.middleware.js';
 const finalizedRequests = new WeakSet<FastifyRequest>();
 
 /**
+ * Requests whose commit-dispatch marker was cleared when their response closed unfinished, while
+ * durable tasks were pending (D-10): if the handler still finishes, its flush drains them anyway.
+ */
+const abandonedRequestsWithDurableTasks = new WeakSet<FastifyRequest>();
+
+/**
+ * `onRequest`: when the response closes unfinished (the client left, or the socket timed out), a
+ * handler that never answers never reaches a flush — so the request's commit-dispatch marker is
+ * cleared then instead of staying in the process-wide set for the life of the process (D-10). The
+ * durable tasks stay in Redis for a later flush of this request or the recovery sweeper.
+ *
+ * The response's `close` is the trigger because it fires on every such path: Fastify's
+ * `onRequestAbort` skips a request whose body was already read, and `onTimeout` needs
+ * `FASTIFY_CONNECTION_TIMEOUT_MS`, off by default.
+ */
+async function clearMarkerWhenTheResponseCloses(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  reply.raw.once('close', () => {
+    if (reply.raw.writableFinished || finalizedRequests.has(request)) return;
+    if (eventBus.clearCommitDispatchMarker(request.id)) {
+      abandonedRequestsWithDurableTasks.add(request);
+    }
+  });
+}
+
+/**
  * The two post-response steps, in order and at most once per request: persist the idempotency
  * cache entry (a 2xx caches its response, anything else releases the placeholder so the client may
  * retry), then flush the post-commit dispatch tasks (enqueue BullMQ side-effect jobs). Both are
@@ -24,7 +52,10 @@ async function finalizeRequestLifecycle(request: FastifyRequest, reply: FastifyR
   }
 
   try {
-    await eventBus.flushOnCommit({ requestId: request.id });
+    await eventBus.flushOnCommit({
+      requestId: request.id,
+      ...(abandonedRequestsWithDurableTasks.has(request) ? { durableTasksPending: true } : {}),
+    });
   } catch (error) {
     logger.warn({ error, requestId: request.id }, 'request.lifecycle.outbox_flush_failed');
   }
@@ -66,6 +97,10 @@ async function finalizeWhenTheClientLeaves(
  * never earlier, so a retry cannot run alongside a write still in progress. Without it the
  * placeholder stayed until its TTL and the side-effect jobs were never enqueued.
  *
+ * A response that closes unfinished also clears the request's commit-dispatch marker at once
+ * (D-10): a handler that never answers never reaches a flush, and the marker would outlive it. When
+ * the handler does finish, its flush still drains the durable tasks.
+ *
  * There is no request-wide database transaction to wait for: each unit of work commits inside
  * `withAppDatabaseContext` before the response is sent. Both steps are best-effort — a failure is
  * logged and never fails the already-sent response.
@@ -80,6 +115,7 @@ const requestLifecycleMiddleware: FastifyPluginAsync = async (app) => {
     routeOptions.onSend = [...existingOnSend, finalizeWhenTheClientLeaves];
   });
 
+  app.addHook('onRequest', clearMarkerWhenTheResponseCloses);
   app.addHook('onResponse', finalizeRequestLifecycle);
 };
 

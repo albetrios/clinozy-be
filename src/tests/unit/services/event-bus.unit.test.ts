@@ -355,6 +355,23 @@ describe('EventBus.clearCommitDispatchMarker (commit-dispatch marker leak guard)
     expect(consumeCommitDispatchTasksMock).toHaveBeenCalledWith({ requestId: 'req-present' });
   });
 
+  it('clearCommitDispatchMarker removes the marker and reports it was set (D-10)', async () => {
+    await scheduleCommitDispatch({ task, options: { requestId: 'req-abandoned' } });
+
+    expect(eventBus.clearCommitDispatchMarker('req-abandoned')).toBe(true);
+    expect(eventBus.clearCommitDispatchMarker('req-abandoned')).toBe(false);
+
+    // The marker is gone, so a plain flush skips the Redis round-trip...
+    await eventBus.flushOnCommit({ requestId: 'req-abandoned' });
+    expect(consumeCommitDispatchTasksMock).not.toHaveBeenCalled();
+
+    // ...and the lifecycle's flush of the same request still drains its durable tasks.
+    await eventBus.flushOnCommit({ requestId: 'req-abandoned', durableTasksPending: true });
+    expect(consumeCommitDispatchTasksMock).toHaveBeenCalledExactlyOnceWith({
+      requestId: 'req-abandoned',
+    });
+  });
+
   it('alerts and counts a durability fallback when the Redis append fails (EX-14)', async () => {
     captureExceptionMock.mockClear();
     recordCommitDispatchDurabilityFallbackMock.mockClear();
