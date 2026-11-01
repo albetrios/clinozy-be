@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const envState = vi.hoisted(() => ({
   LOG_LEVEL: 'silent',
   TRUST_PROXY_REQUIRED: false as boolean,
-  TRUST_PROXY: false as boolean | number | undefined,
+  TRUST_PROXY: false as boolean | number | string[] | undefined,
 }));
 
 vi.mock('@/shared/config/env.config.js', () => ({
@@ -41,6 +41,20 @@ describe('assertHostedTrustProxyConfigured', () => {
     envState.TRUST_PROXY = 1;
     const assertHostedTrustProxyConfigured = await loadAssertion();
     expect(() => assertHostedTrustProxyConfigured()).not.toThrow();
+  });
+
+  it('does not throw when TRUST_PROXY_REQUIRED and a proxy address list is set (D-6)', async () => {
+    envState.TRUST_PROXY_REQUIRED = true;
+    envState.TRUST_PROXY = ['10.0.0.0/8'];
+    const assertHostedTrustProxyConfigured = await loadAssertion();
+    expect(() => assertHostedTrustProxyConfigured()).not.toThrow();
+  });
+
+  it('hands an address list to Fastify as the list, not a hop predicate (D-6)', async () => {
+    envState.TRUST_PROXY = ['10.0.0.0/8', '100.64.0.0/10'];
+    vi.resetModules();
+    const { resolveTrustProxy } = await import('@/shared/utils/http/fastify-server.util.js');
+    expect(resolveTrustProxy()).toEqual(['10.0.0.0/8', '100.64.0.0/10']);
   });
 
   it('does not throw when TRUST_PROXY_REQUIRED is false even with TRUST_PROXY unset', async () => {

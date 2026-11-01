@@ -227,7 +227,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `TEAM_ORGANIZATION_ENABLED` | — | `true` |  | — |
 | `TEST_MODE` | — | `false` |  | — |
 | `TOMBSTONE_RETENTION_DAYS` | — | `90` |  | — |
-| `TRUST_PROXY` | false \| 0, or integer 1–10 | `false` | ✓ | Number of reverse-proxy hops Fastify may trust for X-Forwarded-* headers. |
+| `TRUST_PROXY` | false \| 0, integer 1–10, or comma-separated IP/CIDR list | `false` | ✓ | Reverse proxies Fastify trusts for X-Forwarded-* headers: a hop count, or the proxy addresses (CIDR list). |
 | `TRUST_PROXY_REQUIRED` | — | `true` |  | — |
 | `UPLOAD_ALLOW_SVG` | — | `false` |  | — |
 | `UPLOAD_MAX_PENDING_PER_ORGANIZATION` | — | `2000` |  | — |

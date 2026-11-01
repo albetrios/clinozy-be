@@ -11,6 +11,7 @@
  * `.env.example` and pair it with a corresponding `.optional()` / refinement here.
  */
 import { createHash, createPrivateKey, createPublicKey } from 'node:crypto';
+import { isIP } from 'node:net';
 import { validateProductionRedisTopology } from '@/infrastructure/cache/redis-url.parse.util.js';
 import { type EnvVarSpec, envVar, toSchemaShape } from '@/shared/config/env-var-registry.js';
 import { PERMISSION_CACHE_RECOMPUTE_LOCK_TTL_SECONDS } from '@/shared/constants/ttl.constants.js';
@@ -96,10 +97,43 @@ const booleanString = (defaultValue: 'true' | 'false') =>
 
 const MAX_TRUST_PROXY_HOPS = 10;
 
-const trustProxyHopCountSchema = z
+/** The named ranges `proxy-addr` (Fastify's trust-proxy compiler) accepts besides addresses. */
+const TRUST_PROXY_NAMED_RANGES: ReadonlySet<string> = new Set([
+  'loopback',
+  'linklocal',
+  'uniquelocal',
+]);
+
+/** One trusted-proxy entry: an IPv4/IPv6 address, a CIDR (`/0`–`/32`, `/0`–`/128`), or a named range. */
+function isTrustProxyAddressEntry(entry: string): boolean {
+  if (TRUST_PROXY_NAMED_RANGES.has(entry)) return true;
+  const [address = '', prefix, extra] = entry.split('/');
+  if (extra !== undefined) return false;
+  const family = isIP(address);
+  if (family === 0) return false;
+  if (prefix === undefined) return true;
+  if (!/^\d{1,3}$/.test(prefix)) return false;
+  return Number(prefix) <= (family === 4 ? 32 : 128);
+}
+
+/**
+ * Whether a parsed `TRUST_PROXY` trusts every peer — an address list holding a `/0` CIDR, which
+ * is the bare `true` the schema refuses. Read by the Category-B refine.
+ */
+function trustProxyTrustsEveryAddress(trustProxy: false | number | readonly string[]): boolean {
+  return Array.isArray(trustProxy) && trustProxy.some((entry) => /\/0+$/.test(entry));
+}
+
+/**
+ * `TRUST_PROXY`: which reverse proxies Fastify trusts for `X-Forwarded-*` (D-6). One variable,
+ * two forms: a hop count (`1`–`10`, trust that many hops whatever their address) or a
+ * comma-separated address list (trust a hop only when the peer is in it — a client that reaches
+ * the app around the proxy cannot spoof its IP). Unset, `false` or `0` trusts nothing.
+ */
+const trustProxySchema = z
   .string()
   .optional()
-  .transform((value, context) => {
+  .transform((value, context): false | number | string[] => {
     const normalizedValue = value?.trim().toLowerCase();
     if (!normalizedValue || normalizedValue === 'false' || normalizedValue === '0') {
       return false;
@@ -110,10 +144,18 @@ const trustProxyHopCountSchema = z
       return hopCount;
     }
 
+    const entries = normalizedValue
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    if (entries.length > 0 && entries.every(isTrustProxyAddressEntry)) {
+      return entries;
+    }
+
     context.addIssue({
       code: 'custom',
       message:
-        'TRUST_PROXY must be false/0 or an integer proxy hop count from 1 to 10; do not use bare true',
+        'TRUST_PROXY must be false/0, an integer proxy hop count from 1 to 10, or a comma-separated list of proxy IPs/CIDRs (or loopback, linklocal, uniquelocal); do not use bare true',
     });
     return z.NEVER;
   });
@@ -159,10 +201,11 @@ const SERVER_VARS = {
     },
   }),
   TRUST_PROXY: envVar({
-    schema: trustProxyHopCountSchema,
+    schema: trustProxySchema,
     meta: {
-      allowed: 'false | 0, or integer 1–10',
-      description: 'Number of reverse-proxy hops Fastify may trust for X-Forwarded-* headers.',
+      allowed: 'false | 0, integer 1–10, or comma-separated IP/CIDR list',
+      description:
+        'Reverse proxies Fastify trusts for X-Forwarded-* headers: a hop count, or the proxy addresses (CIDR list).',
     },
   }),
   FASTIFY_KEEP_ALIVE_TIMEOUT_MS: envVar({
@@ -1815,6 +1858,15 @@ export const envSchema = envSchemaBase
       'TRUST_PROXY_REQUIRED must be true in production (without a trusted proxy hop every client collapses to the proxy IP).',
     path: ['TRUST_PROXY_REQUIRED'],
   })
+  // D-6: a /0 in the TRUST_PROXY address list trusts every peer — the bare `true` the field refuses.
+  .refine(
+    (data) => data.NODE_ENV !== 'production' || !trustProxyTrustsEveryAddress(data.TRUST_PROXY),
+    {
+      message:
+        'TRUST_PROXY must not trust every address in production (a /0 CIDR lets any client set X-Forwarded-For); list the proxy addresses.',
+      path: ['TRUST_PROXY'],
+    },
+  )
   .refine(
     (data) =>
       data.OPS_ADMIN_TOKEN === undefined || data.OPS_ADMIN_TOKEN !== data.METRICS_SCRAPE_TOKEN,

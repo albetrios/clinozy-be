@@ -636,6 +636,71 @@ describe('env-schema', () => {
     }
   });
 
+  // D-6: a hop count trusts whatever peer connects; an address list trusts a hop only when its
+  // peer is a listed proxy, so a client reaching the app around the proxy cannot spoof its IP.
+  describe('TRUST_PROXY address list', () => {
+    it('parses a comma-separated IP/CIDR list (and the proxy-addr named ranges)', () => {
+      const parsed = envSchema.safeParse({
+        ...commonRequiredBase,
+        NODE_ENV: 'development',
+        TRUST_PROXY: ' 10.0.0.0/8, 100.64.0.0/10 ,192.0.2.7,FD00::/8,loopback',
+      });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.TRUST_PROXY).toEqual([
+          '10.0.0.0/8',
+          '100.64.0.0/10',
+          '192.0.2.7',
+          'fd00::/8',
+          'loopback',
+        ]);
+      }
+    });
+
+    it.each(['10.0.0.0/33', 'fd00::/129', '10.0.0/8', 'proxy.internal', '10.0.0.0/8/1', '11'])(
+      'rejects the malformed entry %s',
+      (TRUST_PROXY) => {
+        const parsed = envSchema.safeParse({
+          ...commonRequiredBase,
+          NODE_ENV: 'development',
+          TRUST_PROXY,
+        });
+        expect(parsed.success).toBe(false);
+        if (!parsed.success) {
+          expect(parsed.error.flatten().fieldErrors.TRUST_PROXY).toBeDefined();
+        }
+      },
+    );
+
+    it.each(['0.0.0.0/0', '10.0.0.0/8,::/0', '10.0.0.0/00'])(
+      'rejects the trust-everyone list %s in production',
+      (TRUST_PROXY) => {
+        const result = envSchema.safeParse({ ...productionRequiredBase, TRUST_PROXY });
+        expect(result.success).toBe(false);
+        expect(JSON.stringify(result.error?.issues)).toContain('must not trust every address');
+      },
+    );
+
+    it('allows a /0 list outside production', () => {
+      for (const NODE_ENV of ['local', 'development'] as const) {
+        const result = envSchema.safeParse({
+          ...commonRequiredBase,
+          NODE_ENV,
+          TRUST_PROXY: '0.0.0.0/0',
+        });
+        expect(result.success, `${NODE_ENV} should allow it`).toBe(true);
+      }
+    });
+
+    it('accepts a proxy CIDR list in production', () => {
+      const result = envSchema.safeParse({
+        ...productionRequiredBase,
+        TRUST_PROXY: '100.64.0.0/10',
+      });
+      expect(result.error?.issues.filter((issue) => issue.path[0] === 'TRUST_PROXY')).toBeFalsy();
+    });
+  });
+
   it('transforms TRUST_PROXY disabled values to false', () => {
     const disabled = envSchema.safeParse({
       ...process.env,
