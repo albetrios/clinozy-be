@@ -91,6 +91,7 @@
     "contactSearchTooShort": "Type at least 3 letters, 4 digits of a number, or a whole contact number such as C-12345",
     "contactHouseholdHasMembers": "This contact is the first of a household with others in it, so it stays in its own household",
     "contactActivityTemplateType": "The template is for another channel than this message",
+    "uploadKeyAttachedElsewhere": "That upload is already attached to another record",
     "uploadKeyNotConfirmed": "{{key}} is not a confirmed upload of this organization",
     "contactActivityReplyOtherContact": "The entry answered belongs to another contact",
     "contactActivityBodyTooLong": "The message is longer than 1000 characters once its placeholders are filled",

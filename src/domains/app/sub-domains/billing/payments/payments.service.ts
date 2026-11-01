@@ -1,4 +1,5 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
+import { UPLOAD_RECORD_RESOURCE } from '@/domains/app/base-record.types.js';
 import {
   type OrganizationPrincipalDatabaseScope,
   withAppDatabaseContext,
@@ -53,6 +54,8 @@ export class PaymentsService extends BaseRecordService<PaymentOutput> {
   ) {
     super(organizationService, {
       label: 'Payment',
+      // C-2: the upload keys the record holds — each bound to it on its first attach
+      uploadFields: [{ field: 'attachment_keys', resource: UPLOAD_RECORD_RESOURCE.PAYMENT }],
       repository: paymentsRepository,
       parseCreate: validateCreatePayment,
       parseUpdate: validateUpdatePayment,

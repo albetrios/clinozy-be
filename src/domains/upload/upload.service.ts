@@ -1,4 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import type {
+  BaseRecordUploadBinding,
+  BaseRecordUploadOwner,
+} from '@/domains/app/base-record.types.js';
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { removeImageLocation } from '@/shared/utils/security/image-location.util.js';
@@ -443,28 +447,37 @@ export class UploadService {
   }
 
   /**
-   * A short-lived view link for each of the organization's confirmed uploads among `fileKeys` —
-   * a patient photo, a report's files (launch D86) — with the name the person uploaded it under.
+   * A short-lived view link for each of the organization's confirmed uploads among the keys a
+   * record reads — a patient photo, a report's files (launch D86) — with the name the person
+   * uploaded it under. A key is signed only for the record it is bound to (C-2): a key bound to
+   * another record, or to none, has no link.
    *
    * @remarks
-   * - **Algorithm:** one read of the keys' live, confirmed upload rows of the organization (in
-   *   the caller's organization context); for each, a presigned GET valid
-   *   {@link PRESIGNED_URL_EXPIRY_SECONDS} that serves the object inline under its `file_name`.
-   *   A key that is missing, pending, deleted or another organization's gets no link.
+   * - **Algorithm:** one read of the keys' live, confirmed upload rows of the organization (in the
+   *   caller's organization context); for each key whose bound record is the one named, a presigned
+   *   GET valid {@link PRESIGNED_URL_EXPIRY_SECONDS} that serves the object inline under its
+   *   `file_name`.
    * - **Failure modes:** a storage presign error propagates (signing is local — no request).
-   * - **Side effects:** none; the caller decides who may hold the links (the record's own gate).
+   * - **Side effects:** none; the caller's record gate decides who holds the links.
    */
   async createReadUrls(options: {
     organizationInternalId: number;
-    fileKeys: readonly string[];
+    bindings: readonly BaseRecordUploadBinding[];
   }): Promise<Map<string, { url: string; fileName: string }>> {
-    const keys = [...new Set(options.fileKeys)];
-    const rows = await this.repository.findConfirmedByFileKeys(
-      options.organizationInternalId,
-      keys,
-    );
+    const ownerOf = new Map(options.bindings.map((binding) => [binding.fileKey, binding]));
+    const rows = await this.repository.findConfirmedByFileKeys(options.organizationInternalId, [
+      ...ownerOf.keys(),
+    ]);
     const links = new Map<string, { url: string; fileName: string }>();
     for (const row of rows) {
+      const owner = ownerOf.get(row.file_key);
+      if (
+        !owner ||
+        row.bound_resource !== owner.resource ||
+        row.bound_public_id !== owner.publicId
+      ) {
+        continue;
+      }
       links.set(row.file_key, {
         url: await this.objectStorage.createPresignedDownloadUrl({
           key: row.file_key,
@@ -475,6 +488,27 @@ export class UploadService {
       });
     }
     return links;
+  }
+
+  /**
+   * Binds the organization's confirmed uploads among `fileKeys` to a record on its first attach
+   * (C-2); a key already bound to another record is left as it is.
+   *
+   * @remarks
+   * - **Algorithm:** one guarded `UPDATE` in the caller's organization context (the record write's
+   *   own transaction).
+   * - **Failure modes:** none; the caller compares the count with the keys and refuses a short one.
+   */
+  async bindKeysToRecord(options: {
+    organizationInternalId: number;
+    fileKeys: readonly string[];
+    owner: BaseRecordUploadOwner;
+  }): Promise<number> {
+    return this.repository.bindKeysToRecord({
+      organizationId: options.organizationInternalId,
+      fileKeys: options.fileKeys,
+      owner: options.owner,
+    });
   }
 
   /**

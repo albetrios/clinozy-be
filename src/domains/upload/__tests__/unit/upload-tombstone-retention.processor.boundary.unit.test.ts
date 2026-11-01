@@ -8,6 +8,8 @@ vi.mock('@/domains/upload/upload.repository.js', () => ({
     findTombstonedUploadsBeforeMock(...arguments_),
   hardDeleteUploadsByInternalIds: (...arguments_: unknown[]) =>
     hardDeleteUploadsByInternalIdsMock(...arguments_),
+  // G2-5: the orphan sweep runs first; nothing is orphaned in these boundary cases
+  tombstoneUploadsOfMissingRecords: () => Promise.resolve(0),
 }));
 
 const DATABASE_HANDLE = { kind: 'global-retention' };

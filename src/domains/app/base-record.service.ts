@@ -359,6 +359,7 @@ export class BaseRecordService<Output> {
             updated_by_user_id: userId,
           }),
         );
+        await this.bindUploads({ organizationId, owner: row, values });
         await this.writeReferenceLists({ organizationId, ownerId: row.id, lists, userId });
         await this.writeChildLists({ owner: row, children });
         await this.descriptor.afterWrite?.(row, { kind: 'create' }, context);
@@ -416,6 +417,7 @@ export class BaseRecordService<Output> {
           this.descriptor.repository.update(existing.id, values, userId),
         );
         if (!updated) throw new NotFoundError(this.descriptor.label);
+        await this.bindUploads({ organizationId, owner: updated, values });
         await this.writeReferenceLists({ organizationId, ownerId: updated.id, lists, userId });
         await this.writeChildLists({ owner: updated, children });
         await this.descriptor.afterWrite?.(updated, { kind: 'update', before: existing }, context);
@@ -1360,6 +1362,38 @@ export class BaseRecordService<Output> {
     });
   }
 
+  /**
+   * C-2: binds each upload key a write sends to the record it was written to. A key already bound
+   * to another record is a 400 on its field; the refusal throws inside the write's transaction, so
+   * the write rolls back with it.
+   */
+  private async bindUploads({
+    organizationId,
+    owner,
+    values,
+  }: {
+    organizationId: number;
+    owner: BaseRecordRow;
+    values: Record<string, unknown>;
+  }): Promise<void> {
+    for (const { field, resource } of this.descriptor.uploadFields ?? []) {
+      if (!(field in values)) continue;
+      const fileKeys = uploadKeysOf(values[field]);
+      if (fileKeys.length === 0) continue;
+      const bound = await this.ports.bindUploadKeys({
+        organizationId,
+        fileKeys,
+        owner: { resource, publicId: owner.public_id },
+      });
+      if (bound < new Set(fileKeys).size) {
+        throw fieldValidationError({
+          field,
+          messageKey: 'errors:validation.uploadKeyAttachedElsewhere',
+        });
+      }
+    }
+  }
+
   /** Runs a write; a unique or exclusion clash the table names becomes a 409. */
   private async mapConflicts<T>(write: () => Promise<T>): Promise<T> {
     try {
@@ -1444,7 +1478,17 @@ const UNWIRED_PORTS: BaseRecordPorts = {
   thumbnailReadUrls: () => {
     throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
   },
+  bindUploadKeys: () => {
+    throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
+  },
 };
+
+/** The upload keys a field holds: a list of keys, one key, or nothing. */
+function uploadKeysOf(value: unknown): string[] {
+  if (Array.isArray(value))
+    return value.filter((entry): entry is string => typeof entry === 'string');
+  return typeof value === 'string' ? [value] : [];
+}
 
 /**
  * Each key's confirmed upload of the organization, in order (an entry's attachments M6, a photo

@@ -112,6 +112,10 @@ notes, diagnoses, prescriptions, photos, reports, check-ins, the treatment plan)
 purged: `APP_RECORD_KEPT_TABLES`, pinned by `app-record-purge.policy.unit.test.ts`. A deleted row a
 kept record still names (a contact with a visit, an offering on a bill) is skipped as blocked.
 
+**Uploads of purged records (C-2, G2-5):** an upload is bound to the record it was first attached to;
+the tombstone retention first tombstones the uploads whose bound record was purged, then removes the
+tombstoned objects as usual (`tombstoneUploadsOfMissingRecords`, `upload-bound-records.ts`).
+
 Batch deletes use `deleteInBatchesByCondition` with per-row FK fallback (`blockedCount` logged as `batch-delete.fkBlocked`). Every delete runs in a savepoint: the purges run inside one retention transaction, and before the savepoints a single blocked row (an invitation still referencing its inviter, say) aborted that transaction and failed the run every night. One run deletes at most `BATCH_DELETE_MAX_BATCHES_PER_RUN` batches (250 000 rows at the default batch size) — bounding the transaction's locks and WAL — and logs `batch-delete.run_capped` when rows remain for the next run.
 
 ---

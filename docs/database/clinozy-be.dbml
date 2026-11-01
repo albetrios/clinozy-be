@@ -2401,6 +2401,8 @@ Note tenancy.roles {
 }
 
 Table upload.uploads {
+  bound_public_id varchar(28)
+  bound_resource varchar(40)
   bucket varchar(100) [not null]
   created_at timestamptz [not null]
   created_by_user_id bigint

@@ -37,6 +37,7 @@ src/
     │   │   │   ├── app-record-purge.integration.test.ts
     │   │   │   ├── app-route-smoke.integration.test.ts
     │   │   │   ├── app-team-access.integration.test.ts
+    │   │   │   ├── app-upload-binding.integration.test.ts
     │   │   │   └── clinozy-messages.integration.test.ts
     │   │   └── unit/
     │   │   │   ├── app-access-sections.policy.unit.test.ts
@@ -2044,6 +2045,7 @@ src/
     │   │   │   ├── upload-route-smoke.integration.test.ts
     │   │   │   └── upload.integration.test.ts
     │   │   ├── unit/
+    │   │   │   ├── upload-bound-records.unit.test.ts
     │   │   │   ├── upload-content-type.util.unit.test.ts
     │   │   │   ├── upload-key-builders.unit.test.ts
     │   │   │   ├── upload-key-rules.property.unit.test.ts
@@ -2083,6 +2085,7 @@ src/
     │   │   ├── upload-tombstone-retention.constants.ts
     │   │   ├── upload-tombstone-retention.processor.ts
     │   │   └── upload-tombstone-retention.worker.ts
+    │   ├── upload-bound-records.ts
     │   ├── upload.constants.ts
     │   ├── upload.container.ts
     │   ├── upload.controller.ts
