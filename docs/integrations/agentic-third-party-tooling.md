@@ -41,15 +41,15 @@ instinct is right — for code and CI/CD the CLI (or SDK) is the correct tool, n
 | **GitHub** | Actions / Octokit | `gh` | — `gh` CLI (peer MCP `api.githubcopilot.com/mcp/` exists but is intentionally **not** wired at project level) |
 | **Railway** | — | `railway` (`redeploy`) | ✅ `@railway/mcp-server` |
 | **SonarQube** | — | `sonar-scanner` (`pnpm sonar:scan`) | ✅ `mcp/sonarqube` (read findings + quality gate) |
-| **Semgrep** | — | `semgrep` (`pnpm security:sast`) | ✅ `semgrep-mcp` (scan + structured findings) |
+| **Semgrep** | — | `semgrep` (`pnpm security:sast`) | ✅ `semgrep mcp` (scan + structured findings; the `SEMGREP_VERSION` pin) |
 | **Gitleaks** | — | `gitleaks` (`pnpm security:secrets`) | — |
 | **Postman** | — | Postman CLI / `newman` (`pnpm docs:upload`) | ✅ `mcp.postman.com/mcp` |
 | **Cloudflare Turnstile** | fetch verify | `wrangler` | — no MCP (low value); scope TODO below |
 | **Docker** | — | `docker` (`compose`, `buildx bake`) | — gateway only (Docker MCP Toolkit proxies servers, not a peer) |
 | **Context7** (lib docs) | — | — | ✅ `@upstash/context7-mcp` |
 | **codegraph** (code index) | — | `codegraph` | ✅ `codegraph serve --mcp` |
-| **Serena** (semantic code nav) | — | — | ✅ `uvx --from git+https://github.com/oraios/serena serena start-mcp-server` (LSP-backed symbol retrieve/edit — returns symbols, not whole files; token-efficient on a large repo) |
-| **ast-grep** (structural search) | — | `ast-grep` CLI | ✅ `uvx --from ast-grep-mcp --package ast-grep-mcp run` (AST pattern search — returns matches, not files) |
+| **Serena** (semantic code nav) | — | — | ✅ `uvx --from serena-agent==<version> serena start-mcp-server` (LSP-backed symbol retrieve/edit — returns symbols, not whole files; token-efficient on a large repo) |
+| **ast-grep** (structural search) | — | `ast-grep` CLI | ✅ `uvx --from git+https://github.com/ast-grep/ast-grep-mcp@<commit> ast-grep-server` (AST pattern search — returns matches, not files) |
 | **Headroom** (context compression) | — | — | ✅ `headroom mcp serve` (compress large tool output / logs / files before they reach the model) |
 | **dashboards** (local stack status) | — | — | ✅ `node tooling/dev/dashboards/mcp.mjs` (local-only — reads stack health / queue stats / metrics from the dashboards proxy on `:3010`; run `pnpm dashboards:up` first) |
 
@@ -134,12 +134,19 @@ access (read findings, inspect Redis, send a test email) instead of parsing CLI 
 Bash. The non-trivial local invocations:
 
 ```jsonc
-"be-semgrep":   { "command": "uvx",    "args": ["semgrep-mcp"] },
-"be-sonarqube": { "command": "docker", "args": ["run", "--init", "--pull=always", "--rm", "-i",
-                                                 "-e", "SONARQUBE_TOKEN", "-e", "SONARQUBE_URL", "mcp/sonarqube"] },
-"redis":     { "command": "uvx",    "args": ["--from", "redis-mcp-server@latest", "redis-mcp-server", "--url", "${REDIS_URL}"] },
-"resend":    { "command": "docker", "args": ["run", "-i", "--rm", "-e", "RESEND_API_KEY", "mcp/resend"] }
+"be-semgrep":   { "command": "uvx",    "args": ["--from", "semgrep==<SEMGREP_VERSION>", "semgrep", "mcp"] },
+"be-sonarqube": { "command": "docker", "args": ["run", "--init", "--rm", "-i", "--network", "host",
+                                                 "-e", "SONARQUBE_TOKEN", "-e", "SONARQUBE_URL", "mcp/sonarqube@sha256:<digest>"] },
+"redis":     { "command": "uvx",    "args": ["--from", "redis-mcp-server==<version>", "redis-mcp-server", "--url", "${REDIS_URL}"] },
+"resend":    { "command": "docker", "args": ["run", "-i", "--rm", "-e", "RESEND_API_KEY", "mcp/resend@sha256:<digest>"] }
 ```
+
+Every launcher is pinned (H-7; `src/tests/global/mcp-config.global.test.ts`): an exact `==` or `@`
+version, a docker image by digest, ast-grep (no registry release) by git commit, semgrep at
+`SEMGREP_VERSION` in `tooling/setup/agent/tool-versions.sh`. A bump edits `.mcp.example.json` and
+its `agent-os/mcp/` mirror together. An existing `.mcp.json` keeps its old entry (merges are
+non-destructive): delete the entry, then `pnpm mcp:setup <name>` writes the pinned one. `be-sonarqube` runs on the host network with
+`SONARQUBE_URL=http://localhost:9000`: SonarQube listens on 127.0.0.1 only.
 
 Postman is a plain remote URL (`https://mcp.postman.com/mcp`; OAuth, or `Authorization: Bearer
 <key>`). **Docker** is deliberately *not* a peer entry: "Docker MCP" is the **MCP
