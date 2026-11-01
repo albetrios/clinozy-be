@@ -524,9 +524,20 @@ jobs:
         # GitHub Environment to runner" step has already populated every required key; only
         # METRICS_ENABLED=false is forced so no metrics endpoint starts (step env: overrides
         # $GITHUB_ENV).
+        # A Postgres error message can quote a stored value (`invalid input syntax for type integer:
+        # "<value>"`), this runs against the environment's real database, and this repository's
+        # Actions logs are public (H-13): the step's stderr stays on the runner, and a failure names
+        # only the step that failed (create, migrate, seed minimal). Its stdout is the applied
+        # migrations' names and the seed counts.
         env:
           METRICS_ENABLED: 'false'
-        run: pnpm db:seed
+        run: |
+          set -euo pipefail
+          if ! pnpm --silent db:seed 2> "$RUNNER_TEMP/db-seed.stderr"; then
+            failed_step="$(sed -n 's/^✗ \([a-z ]*\):.*/\1/p' "$RUNNER_TEMP/db-seed.stderr" | head -n 1)"
+            echo "::error title=Database preparation failed::the ${failed_step:-database} step failed. Its database message is withheld from this public log (it can quote a stored value); reproduce with pnpm db:seed against the environment's database from a trusted machine."
+            exit 1
+          fi
 
       - name: Set Railway service variables
         # Mirror the entire GitHub Environment (secrets + variables) into each

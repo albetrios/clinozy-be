@@ -108,6 +108,28 @@ describe('restore drill automation policy', () => {
     }
   });
 
+  // The same leak outside the drills: the Railway deploy prepares the environment's real
+  // database (`pnpm db:seed`: migrate, then the reference rows), and its log is public too.
+  it("keeps the deploy's database step from printing a Postgres message (H-13)", () => {
+    const workflow = readFileSync(
+      join(ROOT, '.github/workflows/reusable-railway-deploy.yml'),
+      'utf8',
+    );
+    const steps = workflow.split(/\n(?= {6}- name: )/);
+    const runOf = (step: string) => /\n {8}run: (\|\n[\s\S]*|.*)/.exec(step)?.[1] ?? '';
+    const databaseSteps = steps.filter((step) =>
+      /\bpnpm (?:--silent )?db:(?:seed|migrate)\b/.test(runOf(step)),
+    );
+    expect(databaseSteps.map((step) => /- name: (.+)/.exec(step)?.[1])).toEqual([
+      'Prepare the database (migrations, then the reference rows)',
+    ]);
+    const run = runOf(databaseSteps[0] ?? '');
+    expect(run).toContain('pnpm --silent db:seed 2> "$RUNNER_TEMP/db-seed.stderr"');
+    expect(run).not.toMatch(/\bcat\b|db-seed\.stderr"?\s*$|>&2/m);
+    expect(run).not.toMatch(/--verbose|--debug|set -x/);
+    expect(run).toContain('::error title=Database preparation failed::');
+  });
+
   describe('runs end to end on a public repository without leaking production', () => {
     const drillWorkflowFileNames = [
       'scheduled-monthly-restore-rto.yml',

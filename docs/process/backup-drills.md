@@ -45,6 +45,7 @@ Each GitHub Environment has its own Neon project, and every name derives from it
 - `db:sequences:advance` prints every sequence's value — production's row counts — so the drill shows only its last line, how many sequences moved.
 - The Neon API key is set only on the steps that call Neon (the secret check, create, delete), never job-wide where dependency install scripts and test code could read it.
 - No step runs a query of its own or prints a query's result. `db:migrate` shows only the migrations it applied: its stderr stays on the runner, since a Postgres message can quote a stored value (`invalid input syntax for type integer: "<value>"`), and a failure names only the step that failed — reproduce it on a restore branch of your own. `db:sequences:advance` and `db:restore:smoke` print a database error only as its SQLSTATE, constraint and table (`sanitizeDatabaseError`), and the smoke boots the app at `LOG_LEVEL=warn`, so no request line reaches the log (H-13; pinned by `src/tests/unit/ci/restore-drill.policy.unit.test.ts`).
+- The same holds outside the drills: the Railway deploy's `pnpm db:seed` (migrate, then the reference rows, against the environment's real database) keeps its stderr on the runner and names only the failed step (`reusable-railway-deploy.yml`, pinned by the same test).
 
 ---
 

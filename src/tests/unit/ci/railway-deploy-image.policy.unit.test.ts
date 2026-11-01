@@ -137,9 +137,10 @@ describe('Railway deploy tooling (policy)', () => {
     // environment provisions NO personal/team organization — every provision rolls back on the
     // missing permission FK and the read-path self-heal swallows it to
     // `personal_organization_id: null`. `pnpm db:seed` is the one database step: it migrates,
-    // then seeds (the order `src/tests/unit/scripts/db-prepare.unit.test.ts` pins).
-    expect(deployWorkflow).toMatch(/run: pnpm db:seed$/m);
-    expect(deployWorkflow).not.toMatch(/run: pnpm db:migrate$/m);
+    // then seeds (the order `src/tests/unit/scripts/db-prepare.unit.test.ts` pins). Its stderr
+    // stays on the runner (H-13, pinned in restore-drill.policy.unit.test.ts), hence `--silent`.
+    expect(deployWorkflow).toMatch(/^\s+if ! pnpm --silent db:seed 2> /m);
+    expect(deployWorkflow).not.toMatch(/pnpm (?:--silent )?db:migrate\b/);
   });
 
   it('declares no dead target_branch input (single-trunk keeps one branch control)', () => {
