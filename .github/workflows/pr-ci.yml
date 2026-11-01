@@ -721,9 +721,18 @@ jobs:
         run: |
           set -euo pipefail
           canary="$(mktemp -d)"
-          printf 'export const STRIPE_SECRET_KEY = "sk_live_%s";\n' "$(head -c 64 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)" > "$canary/canary.ts"
-          if gitleaks detect --no-git --source "$canary" --config .gitleaks.toml --redact --no-banner; then
-            echo "::error title=Secret scan has no rules::gitleaks with .gitleaks.toml did not find a planted key"
+          # The same key in three places: the source tree and a workflow file must be found, an
+          # installed package skipped (H-5: an unanchored `\.git` entry once skipped .github/).
+          mkdir -p "$canary/.github/workflows" "$canary/node_modules/planted"
+          line="$(printf 'export const STRIPE_SECRET_KEY = "sk_live_%s";' "$(head -c 64 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)")"
+          for file in canary.ts .github/workflows/canary.yml node_modules/planted/canary.js; do
+            printf '%s\n' "$line" > "$canary/$file"
+          done
+          gitleaks detect --no-git --source "$canary" --config .gitleaks.toml --redact --no-banner \
+            --exit-code 0 --report-format json --report-path "$canary-report.json"
+          found="$(jq -r --arg root "$canary/" '[.[].File | ltrimstr($root)] | sort | join(",")' "$canary-report.json")"
+          if [ "$found" != ".github/workflows/canary.yml,canary.ts" ]; then
+            echo "::error title=Secret scan misses or over-skips::gitleaks with .gitleaks.toml found [$found], expected the planted key in canary.ts and .github/workflows/canary.yml only"
             exit 1
           fi
 

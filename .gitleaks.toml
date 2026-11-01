@@ -12,16 +12,17 @@ title = "clinozy-be gitleaks config"
 [extend]
 useDefault = true
 
+# Every path entry is anchored to whole path segments (H-5). Unanchored, `\.git` also matched
+# `.github/` and `build` matched any path holding the word, so no workflow file was ever scanned.
+# src/tests/unit/ci/secret-scan.policy.unit.test.ts plants a key under .github/workflows/ (found)
+# and under node_modules/ (skipped); the PR CI canary does the same before it scans.
 [allowlist]
 description = "Global allowlist"
 paths = [
-  '''node_modules''',
-  '''\.git''',
-  '''dist''',
-  '''build''',
-  '''coverage''',
-  '''\.env\.example''',
-  '''pnpm-lock\.yaml''',
-  '''docs/openapi\.json''',
-  '''docs/postman-collection\.json''',
+  '''(^|/)(node_modules|dist|build|coverage)/''',
+  '''(^|/)\.git/''',
+  '''(^|/)\.env\.example$''',
+  '''(^|/)pnpm-lock\.yaml$''',
+  '''(^|/)docs/openapi\.json$''',
+  '''(^|/)docs/postman-collection\.json$''',
 ]
