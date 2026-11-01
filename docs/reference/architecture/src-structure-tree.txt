@@ -1266,6 +1266,7 @@ src/
     │   │   │   ├── seed/
     │   │   │   │   ├── auth-mfa.bulk.seed.ts
     │   │   │   │   ├── auth-mfa.faker.ts
+    │   │   │   │   ├── auth-mfa.seed.ts
     │   │   │   │   └── index.ts
     │   │   │   ├── auth-mfa-method.schema.ts
     │   │   │   ├── auth-mfa-recovery-code.repository.ts
@@ -3056,6 +3057,7 @@ src/
     │   │   ├── pagination-caps.integration.test.ts
     │   │   └── scalar-reference.integration.test.ts
     │   ├── auth/
+    │   │   ├── admin-token-mfa.integration.test.ts
     │   │   └── email-login.integration.test.ts
     │   ├── billing/
     │   │   └── plans.integration.test.ts
@@ -3527,6 +3529,8 @@ src/
     │   │   ├── dead-letter.unit.test.ts
     │   │   └── dlq-replay.unit.test.ts
     │   ├── scripts/
+    │   │   ├── admin/
+    │   │   │   └── api-sign-in.util.unit.test.ts
     │   │   ├── seed/
     │   │   │   ├── bulk-config.unit.test.ts
     │   │   │   ├── demo-clinic-plan.unit.test.ts

@@ -23,7 +23,7 @@ const sanitizedWorkers = new WeakSet<Worker>();
  * - **Failure modes:** none of its own; the processor's error is always rethrown.
  * - **Side effects:** replaces `callProcessJob` on this instance only; idempotent per worker.
  * - **Notes:** applied by `buildWorkerHandle`, which every worker the runtime registers goes
- *   through, so the ~30 `new Worker(...)` sites need no change. Call it right after constructing
+ *   through, so the ~30 worker construction sites need no change. Call it right after constructing
  *   the worker (as `buildWorkerHandle` is), before the first job can be fetched.
  */
 export function sanitizeWorkerFailures(worker: Worker): void {
