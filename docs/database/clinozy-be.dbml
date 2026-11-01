@@ -625,6 +625,7 @@ Table app.medical_purchase_order_items {
   id bigint [pk, increment, not null]
   is_gst_inclusive boolean [not null]
   is_received boolean
+  is_short boolean
   line_number smallint [not null]
   medical_purchase_order_id bigint [not null]
   medicine_batch_id bigint
@@ -634,6 +635,8 @@ Table app.medical_purchase_order_items {
   public_id varchar(28) [not null]
   quantity int [not null]
   rate numeric(12, 2) [not null]
+  received_free_quantity int
+  received_quantity int
   taxable_amount numeric(12, 2) [not null]
   updated_at timestamptz [not null]
 }

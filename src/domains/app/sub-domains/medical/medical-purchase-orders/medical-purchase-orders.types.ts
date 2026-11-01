@@ -18,6 +18,11 @@ export interface MedicalPurchaseOrderItemOutput {
   taxable_amount: number;
   gst_amount: number;
   is_received: boolean | null;
+  /** The packs that came — set once received (feat-short-delivery). */
+  received_quantity: number | null;
+  received_free_quantity: number | null;
+  /** Received with fewer packs (or free packs) than ordered. */
+  is_short: boolean | null;
   batch_number: string | null;
   expiry_month: string | null;
 }
@@ -43,6 +48,8 @@ export interface MedicalPurchaseOrderOutput {
   received_at: string | null;
   items: MedicalPurchaseOrderItemOutput[];
   item_count: number;
+  /** How many of its lines came short (feat-short-delivery). */
+  short_line_count: number;
   free_count: number;
   /** `taxable_total + gst_total` — its lines', the received ones' once received (PG7). */
   total: number;

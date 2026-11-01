@@ -30,6 +30,7 @@ export function serializeMedicalPurchaseOrder({
     received_at: toInstant(row.received_at),
     items: [],
     item_count: 0,
+    short_line_count: 0,
     free_count: 0,
     total: toAmount(row.total) ?? 0,
     taxable_total: toAmount(row.taxable_total) ?? 0,

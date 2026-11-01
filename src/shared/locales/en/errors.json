@@ -169,6 +169,7 @@
     "medicalPurchaseGstMonthInFuture": "The month can't be after this month",
     "medicalPurchaseOrderItemNotOnOrder": "{{id}} is not a line of this order",
     "medicalPurchaseOrderNothingReceived": "Receive at least one line",
+    "medicalPurchaseOrderReceivedOverOrdered": "{{id}} came with more than was ordered — add the extra as an unexpected item",
     "medicalPurchaseOrderTooManyLines": "An order holds at most {{max}} lines",
     "invoiceSoldThroughStore": "Medicines are sold through the medical store's sales (POST /app/medical-sales)",
     "medicalRepNextVisitWindow": "Pick a next visit from today to {{max}} days ahead",
