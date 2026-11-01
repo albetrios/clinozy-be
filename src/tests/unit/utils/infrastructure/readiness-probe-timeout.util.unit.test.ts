@@ -39,4 +39,43 @@ describe('readinessProbeTimeout', () => {
       }),
     ).resolves.toBe(42);
   });
+
+  // D-7: the deadline timer was never cleared, so every fast probe left a pending timer that
+  // held its closure (and the event loop) until it fired.
+  it.each([
+    ['resolves', () => Promise.resolve('ready')],
+    ['rejects', () => Promise.reject(new Error('probe_failed'))],
+  ])('clears its deadline timer when the probe %s first', async (_outcome, makeProbe) => {
+    vi.useFakeTimers();
+    try {
+      const race = readinessProbeTimeout({
+        incomingPromise: makeProbe(),
+        timeoutMilliseconds: 5_000,
+        probeLabelForErrors: 'cleared_probe_label',
+      });
+      await race.catch(() => undefined);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears its deadline timer when the deadline wins', async () => {
+    vi.useFakeTimers();
+    try {
+      const race = readinessProbeTimeout({
+        incomingPromise: new Promise<never>(() => {
+          /* intentionally hanging */
+        }),
+        timeoutMilliseconds: 50,
+        probeLabelForErrors: 'slow_probe_label',
+      });
+      const settled = race.catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(await settled).toBeInstanceOf(Error);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

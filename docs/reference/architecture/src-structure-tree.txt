@@ -2274,6 +2274,9 @@ src/
     └── domain-containers.plugin.ts
 ├── infrastructure/
     ├── api-reference/
+    │   ├── __tests__/
+    │   │   └── unit/
+    │   │   │   └── scalar-api-reference.unit.test.ts
     │   ├── api-reference.overview.md
     │   └── scalar-api-reference.ts
     ├── cache/
