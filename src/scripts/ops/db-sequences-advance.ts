@@ -13,6 +13,7 @@ import {
   resolveDatabaseSsl,
   withoutSslQueryParameters,
 } from '@/infrastructure/database/utils/connection-url.util.js';
+import { sanitizeDatabaseError } from '@/shared/utils/security/sensitive-redaction.util.js';
 import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 /**
@@ -93,6 +94,12 @@ export async function advanceIdSequences(options: {
   return advancedSequences;
 }
 
+/** `error` as one printable line; a database error through {@link sanitizeDatabaseError}. */
+function describeFailure(error: unknown): string {
+  const printable = sanitizeDatabaseError(error);
+  return printable instanceof Error ? printable.message : String(printable);
+}
+
 async function main(): Promise<void> {
   parseCommandLine({ args: process.argv.slice(2) });
   const connectionUrl = process.env.DATABASE_MIGRATION_URL ?? process.env.DATABASE_URL;
@@ -110,7 +117,11 @@ async function main(): Promise<void> {
     }),
     connectionTimeoutMillis: 15_000,
   });
-  client.on('error', (error) => console.error('Database connection error', error));
+  // The restore drills run this on a copy of production with public logs (H-13): a database error
+  // leaves only as its SQLSTATE, constraint and table — never its row detail or a quoted value.
+  client.on('error', (error) =>
+    console.error('Database connection error:', describeFailure(error)),
+  );
   await client.connect();
   try {
     const advancedSequences = await advanceIdSequences({ client });
@@ -127,7 +138,7 @@ async function main(): Promise<void> {
 
 if (isMain(import.meta.url)) {
   main().catch((error: unknown) => {
-    console.error(error instanceof Error ? error.message : error);
+    console.error(describeFailure(error));
     process.exit(1);
   });
 }
