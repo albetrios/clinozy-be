@@ -33,40 +33,47 @@ import { describe, expect, it } from 'vitest';
 const PROJECT_ROOT = process.cwd();
 const DOMAINS_ROOT = join(PROJECT_ROOT, 'src', 'domains');
 
+/**
+ * The patterns are literal per table (no `new RegExp` built from a name), so the scan stays a
+ * static, reviewable pattern list: Semgrep's `detect-non-literal-regexp` holds for test code too.
+ */
 type TrackedTable = {
-  /** Schema file the table is imported from (module basename). */
-  module: string;
-  /** Export name in that schema file, as repositories import it. */
-  identifier: string;
   /** `schema.table`, as the exceptions list names it. */
   key: string;
+  /** The repository imports the schema table: its export name from its schema file. */
+  importPattern: RegExp;
+  /** A Drizzle `from` or join that names the table as its first argument. */
+  readPattern: RegExp;
   /** The organization key a filter must mention for this table. */
   organizationKey: RegExp;
 };
 
 const TRACKED_TABLES: readonly TrackedTable[] = [
   {
-    module: 'membership.schema',
-    identifier: 'memberships',
     key: 'tenancy.memberships',
+    importPattern:
+      /import\s*(?:type\s*)?\{[^}]*\bmemberships\b[^}]*\}\s*from\s*'[^']*membership\.schema\.js'/,
+    readPattern: /\.(?:from|innerJoin|leftJoin|rightJoin|fullJoin|join)\(\s*memberships\s*[,)]/,
     organizationKey: /\borganization_id\b/,
   },
   {
-    module: 'organization.schema',
-    identifier: 'organizations',
     key: 'tenancy.organizations',
+    importPattern:
+      /import\s*(?:type\s*)?\{[^}]*\borganizations\b[^}]*\}\s*from\s*'[^']*organization\.schema\.js'/,
+    readPattern: /\.(?:from|innerJoin|leftJoin|rightJoin|fullJoin|join)\(\s*organizations\s*[,)]/,
     organizationKey: /\b(?:organization_id|organizations\.id|organizations\.public_id)\b/,
   },
   {
-    module: 'notification.schema',
-    identifier: 'notifications',
     key: 'notify.notifications',
+    importPattern:
+      /import\s*(?:type\s*)?\{[^}]*\bnotifications\b[^}]*\}\s*from\s*'[^']*notification\.schema\.js'/,
+    readPattern: /\.(?:from|innerJoin|leftJoin|rightJoin|fullJoin|join)\(\s*notifications\s*[,)]/,
     organizationKey: /\borganization_id\b/,
   },
   {
-    module: 'audit.schema',
-    identifier: 'logs',
     key: 'audit.logs',
+    importPattern: /import\s*(?:type\s*)?\{[^}]*\blogs\b[^}]*\}\s*from\s*'[^']*audit\.schema\.js'/,
+    readPattern: /\.(?:from|innerJoin|leftJoin|rightJoin|fullJoin|join)\(\s*logs\s*[,)]/,
     organizationKey: /\borganization_id\b/,
   },
 ];
@@ -154,19 +161,13 @@ function findUnfilteredTableReads(options: {
 }): string[] {
   const tables = options.tables ?? TRACKED_TABLES;
   const keys: string[] = [];
-  const importedTables = tables.filter((table) =>
-    new RegExp(
-      `import\\s*(?:type\\s*)?\\{[^}]*\\b${table.identifier}\\b[^}]*\\}\\s*from\\s*'[^']*${table.module}\\.js'`,
-    ).test(options.source),
-  );
+  const importedTables = tables.filter((table) => table.importPattern.test(options.source));
   if (importedTables.length === 0) return keys;
 
   for (const method of splitMethods(options.source.split('\n'))) {
     if (!/\bselect(?:Distinct)?\s*\(/.test(method.body)) continue;
     for (const table of importedTables) {
-      const readsTable = new RegExp(
-        `\\.(?:from|innerJoin|leftJoin|rightJoin|fullJoin|join)\\(\\s*${table.identifier}\\s*[,)]`,
-      ).test(method.body);
+      const readsTable = table.readPattern.test(method.body);
       if (!readsTable || table.organizationKey.test(method.body)) continue;
       keys.push(`${options.file}#${method.name}#${table.key}`);
     }
@@ -212,6 +213,33 @@ describe('Global: user-identity policy tables are read with an organization filt
       '',
     );
     expect(findUnfilteredTableReads({ file: 'sample.ts', source: local })).toEqual([]);
+  });
+
+  it.each([
+    ['memberships', 'tenancy/sub-domains/membership/membership.schema.js', 'tenancy.memberships'],
+    [
+      'organizations',
+      'tenancy/sub-domains/organization/organization.schema.js',
+      'tenancy.organizations',
+    ],
+    [
+      'notifications',
+      'notify/sub-domains/notification/notification.schema.js',
+      'notify.notifications',
+    ],
+    ['logs', 'audit/audit.schema.js', 'audit.logs'],
+  ])('detects an unfiltered join on %s', (identifier, schemaPath, key) => {
+    const source = [
+      `import { ${identifier}, other } from '@/domains/${schemaPath}';`,
+      'class Repo {',
+      '  async listForUser(user_id: number) {',
+      `    return getRequestDatabase().select().from(other).leftJoin(${identifier}, eq(${identifier}.user_id, user_id));`,
+      '  }',
+      '}',
+    ].join('\n');
+    expect(findUnfilteredTableReads({ file: 'sample.ts', source })).toEqual([
+      `sample.ts#listForUser#${key}`,
+    ]);
   });
 
   it('every select on a user-identity policy table names its organization or is a listed exception', async () => {
