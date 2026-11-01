@@ -6,14 +6,14 @@ import {
   type ManagedCircuitBreakerName,
   snapshotManagedCircuitBreakers,
 } from '@/infrastructure/resilience/circuit-breaker.js';
-import { isBearerTokenValid } from '@/shared/utils/security/bearer-token.util.js';
+import {
+  isBearerTokenValid,
+  isMetricsScrapeTokenPresented,
+} from '@/shared/utils/security/bearer-token.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 function requireOpsBearerToken(authorizationHeader: string | undefined): void {
-  const bearerToken = getEnv().METRICS_SCRAPE_TOKEN;
-  if (
-    !(bearerToken && isBearerTokenValid({ authorizationHeader, expectedBearerToken: bearerToken }))
-  ) {
+  if (!isMetricsScrapeTokenPresented(authorizationHeader)) {
     throw new UnauthorizedError('errors:invalidMetricsToken');
   }
 }

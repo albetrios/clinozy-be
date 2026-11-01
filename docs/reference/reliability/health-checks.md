@@ -120,10 +120,20 @@ curl -sS -w '\nHTTP %{http_code}\n' http://localhost:9090/livez
 { "status": "live", "role": "worker" }
 ```
 
-`/readyz` validates the worker process and queue state in addition to dependencies:
+`/readyz` validates the worker process and queue state in addition to dependencies. The probe round (dependency probes, queue heartbeats, queue depth) is cached for `HEALTH_READINESS_PROBE_CACHE_TTL_MS` (2 s), with concurrent misses sharing one round, so a burst of probes cannot fan out into Postgres and Redis load. Without a token the body is only the status — the status code is the same:
 
 ```bash
 curl -sS -w '\nHTTP %{http_code}\n' http://localhost:9090/readyz
+```
+
+```json
+{ "status": "ok", "role": "worker" }
+```
+
+The dependency, fleet and queue detail is served only with the metrics scrape token (the same check as the API's `GET /metrics`):
+
+```bash
+curl -sS -H "Authorization: Bearer $METRICS_SCRAPE_TOKEN" http://localhost:9090/readyz
 ```
 
 Response **200** when the worker is ready and dependencies are healthy:

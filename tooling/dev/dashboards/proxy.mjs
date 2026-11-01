@@ -231,8 +231,9 @@ async function serveStatus(res) {
 
 async function serveWorker(res, path) {
   const workerPath = path.slice('/_worker'.length) || '/';
+  // /readyz answers only its status without the scrape token; the hub reads the verbose body.
   const headers =
-    workerPath.startsWith('/metrics') && METRICS_TOKEN
+    (workerPath.startsWith('/metrics') || workerPath.startsWith('/readyz')) && METRICS_TOKEN
       ? { authorization: `Bearer ${METRICS_TOKEN}` }
       : {};
   const r = await upstream({

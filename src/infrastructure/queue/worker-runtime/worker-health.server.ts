@@ -5,18 +5,26 @@ import {
   renderMetrics,
 } from '@/infrastructure/observability/metrics/metrics.js';
 import { env, getEnv } from '@/shared/config/env.config.js';
-import { isBearerTokenValid } from '@/shared/utils/security/bearer-token.util.js';
+import {
+  isBearerTokenValid,
+  isMetricsScrapeTokenPresented,
+} from '@/shared/utils/security/bearer-token.util.js';
 import { getQueuesWaitingJobCount } from '@/infrastructure/observability/metrics/bullmq-metrics.js';
 import {
   isWorkerStalled,
   isWorkerThroughputStalled,
   readWorkerQueueHeartbeats,
+  type WorkerQueueHeartbeat,
 } from '@/infrastructure/queue/worker-runtime/worker-queue-heartbeat.js';
 import {
   WORKER_QUEUE_NAMES,
   WORKER_THROUGHPUT_QUEUE_NAMES,
 } from '@/infrastructure/queue/queue-catalog.js';
-import { runDependencyReadinessProbes } from '@/shared/utils/infrastructure/readiness-probes.util.js';
+import {
+  getCachedDependencyReadinessProbes,
+  type ReadinessProbeSummary,
+} from '@/shared/utils/infrastructure/readiness-probes.util.js';
+import { HEALTH_READINESS_PROBE_CACHE_TTL_MS } from '@/shared/constants/ttl.constants.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 let healthServer: http.Server | null = null;
@@ -106,9 +114,23 @@ function handleLivenessProbe(response: http.ServerResponse): void {
   sendJson({ response, statusCode: 200, body: { status: 'live', role: 'worker' } });
 }
 
-async function handleReadinessProbe(response: http.ServerResponse): Promise<void> {
+/** One round of the worker's readiness inputs, reused for {@link HEALTH_READINESS_PROBE_CACHE_TTL_MS}. */
+type WorkerReadinessSnapshot = {
+  readiness: ReadinessProbeSummary;
+  worker_queues: WorkerQueueHeartbeat[];
+  throughputWaiting: number;
+  stalled: boolean;
+};
+
+let cachedWorkerReadiness: {
+  snapshot: WorkerReadinessSnapshot;
+  cachedAtMilliseconds: number;
+} | null = null;
+let inFlightWorkerReadiness: Promise<WorkerReadinessSnapshot> | null = null;
+
+async function readWorkerReadinessSnapshot(): Promise<WorkerReadinessSnapshot> {
   const [readiness, worker_queues, throughputHeartbeats] = await Promise.all([
-    runDependencyReadinessProbes(),
+    getCachedDependencyReadinessProbes(),
     readWorkerQueueHeartbeats(WORKER_QUEUE_NAMES),
     readWorkerQueueHeartbeats(WORKER_THROUGHPUT_QUEUE_NAMES),
   ]);
@@ -133,16 +155,77 @@ async function handleReadinessProbe(response: http.ServerResponse): Promise<void
     isThroughputStalled: throughputStalled,
     waitingJobCount: throughputWaiting,
   });
+  return { readiness, worker_queues, throughputWaiting, stalled };
+}
+
+/**
+ * D-5: the readiness inputs (dependency probes, heartbeats, queue depth) are read at most once per
+ * {@link HEALTH_READINESS_PROBE_CACHE_TTL_MS}; concurrent misses share one in-flight round, so an
+ * unauthenticated `/readyz` flood cannot fan out into Postgres and Redis load. A rejected round is
+ * not cached.
+ */
+async function getCachedWorkerReadinessSnapshot(): Promise<WorkerReadinessSnapshot> {
+  const nowMilliseconds = performance.now();
+  if (
+    cachedWorkerReadiness &&
+    nowMilliseconds - cachedWorkerReadiness.cachedAtMilliseconds <
+      HEALTH_READINESS_PROBE_CACHE_TTL_MS
+  ) {
+    return cachedWorkerReadiness.snapshot;
+  }
+  if (inFlightWorkerReadiness) return inFlightWorkerReadiness;
+  inFlightWorkerReadiness = (async () => {
+    try {
+      const snapshot = await readWorkerReadinessSnapshot();
+      cachedWorkerReadiness = { snapshot, cachedAtMilliseconds: performance.now() };
+      return snapshot;
+    } finally {
+      inFlightWorkerReadiness = null;
+    }
+  })();
+  return inFlightWorkerReadiness;
+}
+
+/**
+ * Test-only reset of the worker readiness cache, so one Vitest case's probe round does not answer
+ * the next.
+ *
+ * @remarks
+ * - **Side effects:** clears the module-level cached snapshot and in-flight round.
+ */
+export function resetWorkerReadinessCacheForTests(): void {
+  cachedWorkerReadiness = null;
+  inFlightWorkerReadiness = null;
+}
+
+async function handleReadinessProbe({
+  request,
+  response,
+}: {
+  request: http.IncomingMessage;
+  response: http.ServerResponse;
+}): Promise<void> {
+  const { readiness, worker_queues, throughputWaiting, stalled } =
+    await getCachedWorkerReadinessSnapshot();
   const processReady = workerReady && !stalled && readiness.status === 'ok';
   const status = resolveWorkerHealthStatus({
     isReady: workerReady,
     isStalled: stalled,
     dependencyStatus: readiness.status,
   });
+  const statusCode = processReady ? 200 : 503;
+
+  // D-5: the dependency, fleet and queue detail is reconnaissance for an unauthenticated caller
+  // (as on the API, sec-C4). Probes get the status code and status; the verbose body needs the
+  // metrics scrape token, the same check the API's /metrics uses.
+  if (!isMetricsScrapeTokenPresented(resolveAuthorizationHeader(request.headers.authorization))) {
+    sendJson({ response, statusCode, body: { status, role: 'worker' } });
+    return;
+  }
 
   sendJson({
     response,
-    statusCode: processReady ? 200 : 503,
+    statusCode,
     body: {
       status,
       role: 'worker',
@@ -198,7 +281,7 @@ async function handleHealthRequest({
     return;
   }
   if (url === '/readyz') {
-    await handleReadinessProbe(response);
+    await handleReadinessProbe({ request, response });
     return;
   }
   if (url === '/metrics' && isMetricsEnabled()) {
@@ -212,7 +295,8 @@ async function handleHealthRequest({
 
 /**
  * Boots a lightweight Node HTTP server (no Fastify) exposing `/livez` (liveness), `/readyz`
- * (readiness — deps + worker registration + stall) and (when metrics are enabled) `/metrics`
+ * (readiness — deps + worker registration + stall, cached for a short window; the verbose body
+ * only with the metrics scrape token) and (when metrics are enabled) `/metrics`
  * on `WORKER_HEALTH_PORT`. Idempotent — subsequent calls are no-ops while the server is
  * already listening. Listens on `HTTP_BIND_HOST` so the same binding rules as the API apply.
  * `/metrics` is gated by `METRICS_SCRAPE_TOKEN` (required in production when metrics are enabled).
@@ -252,6 +336,8 @@ export async function stopWorkerHealthServer(): Promise<void> {
   healthServer = null;
   workerReady = false;
   registeredWorkerCount = 0;
+  cachedWorkerReadiness = null;
+  inFlightWorkerReadiness = null;
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {
