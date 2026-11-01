@@ -28,10 +28,16 @@ function loadOpenApiSpecContent(openApiSpecPath: string): string {
 
 /**
  * Mounts the Scalar API Reference UI at `GET /reference` when `ENABLE_API_REFERENCE=true`.
- * The OpenAPI document is read lazily on each request from `OPENAPI_SPEC_PATH`
- * (default `docs/openapi/openapi.json`). When `ENABLE_MCP_SERVER` is also on, an HTML
+ * The OpenAPI document is read once, at registration, from `OPENAPI_SPEC_PATH`
+ * (default `docs/openapi/openapi.json`) — never per request, so an unauthenticated
+ * `/reference` flood costs no disk reads (D-8). When `ENABLE_MCP_SERVER` is also on, an HTML
  * comment pointing at the MCP endpoint is appended to the rendered page for discoverability.
  * No-op when the flag is off.
+ *
+ * @remarks
+ * - **Failure modes:** throws at registration (so at boot) when the spec file is missing, with the
+ *   `pnpm docs:generate` hint; a regenerated spec is served after a restart.
+ * - **Side effects:** one synchronous file read; registers the Scalar plugin and an `onSend` hook.
  */
 export async function registerScalarApiReference(application: FastifyInstance): Promise<void> {
   const environment = getEnv();
@@ -40,12 +46,13 @@ export async function registerScalarApiReference(application: FastifyInstance): 
   }
 
   const openApiSpecPath = environment.OPENAPI_SPEC_PATH ?? 'docs/openapi/openapi.json';
+  const openApiSpecContent = loadOpenApiSpecContent(openApiSpecPath);
 
   await application.register(scalarApiReference, {
     routePrefix: API_REFERENCE_ROUTE_PREFIX,
     logLevel: 'silent',
     configuration: {
-      content: () => loadOpenApiSpecContent(openApiSpecPath),
+      content: () => openApiSpecContent,
     },
   });
 
