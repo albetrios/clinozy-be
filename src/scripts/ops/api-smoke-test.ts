@@ -509,6 +509,10 @@ const SWEEP_EXPECTED_OVERRIDES: Record<string, number[]> = {
   // 400 is the validation answering, 403 a smoke user without appointment:read.
   'GET /api/v1/app/appointments/daily-counts': [400, 403],
   'GET /api/v1/app/appointments/slots': [400, 403],
+  // Required `month` (`YYYY-MM`) the sweep never sends: 400 is the validation answering, 403 a
+  // smoke user without medicine:read (the export also needs medicine:export).
+  'GET /api/v1/app/medical-purchase-orders/gst-summary': [400, 403],
+  'GET /api/v1/app/medical-purchase-orders/gst-summary/exports': [400, 403],
 };
 
 import {
