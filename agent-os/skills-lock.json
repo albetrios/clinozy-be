@@ -41,7 +41,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-code-quality-guard/SKILL.md",
-      "computedHash": "954097ed51882dcdafa0e00fb6eb278cc2057818867b33e896c79d61709b8106"
+      "computedHash": "52491599a83222aa62cc3a759e57f6bbeeeb752c401f0702261df2982d0054b2"
     },
     "be-code-smells-and-best-practices": {
       "source": "local",
@@ -77,7 +77,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-dependency-security/SKILL.md",
-      "computedHash": "218a00f21dbf4c56dbaba6d8e3eef74e32aecb95dc22e047a5b0e1bb09e76f62"
+      "computedHash": "cc13c18a660516859206cac2fd59597f427bb336398c62c0af462999b7edd6b7"
     },
     "be-docs-audit": {
       "source": "local",
