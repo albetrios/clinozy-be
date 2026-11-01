@@ -92,9 +92,11 @@ export const patient_treatments = appSchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [

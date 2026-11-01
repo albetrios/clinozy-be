@@ -79,9 +79,11 @@ export const day_closes = appSchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [
@@ -195,6 +197,7 @@ export const day_close_events = appSchema
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [

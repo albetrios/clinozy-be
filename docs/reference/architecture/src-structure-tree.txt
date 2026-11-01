@@ -3064,7 +3064,8 @@ src/
     │   │   ├── request-transaction-budget.integration.test.ts
     │   │   ├── resource-quota-lock.integration.test.ts
     │   │   ├── transaction-connection-loss.integration.test.ts
-    │   │   └── transaction-rollback.integration.test.ts
+    │   │   ├── transaction-rollback.integration.test.ts
+    │   │   └── user-erasure-foreign-keys.integration.test.ts
     │   ├── observability/
     │   │   ├── db-pool-metrics.integration.test.ts
     │   │   ├── metrics-red.integration.test.ts

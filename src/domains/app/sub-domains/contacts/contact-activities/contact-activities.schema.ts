@@ -143,8 +143,12 @@ const contactActivityColumns = {
   is_private_photo: boolean('is_private_photo').notNull().default(false),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(() => users.id),
-  updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(() => users.id),
+  created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(() => users.id, {
+    onDelete: 'set null',
+  }),
+  updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(() => users.id, {
+    onDelete: 'set null',
+  }),
 };
 
 /** The table as its extra config sees it. */

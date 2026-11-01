@@ -69,9 +69,11 @@ export const supplier_credits = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [

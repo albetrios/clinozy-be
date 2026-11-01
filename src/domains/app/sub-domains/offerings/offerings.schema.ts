@@ -82,9 +82,11 @@ export const offerings = appSchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       deleted_at: timestamp('deleted_at', { withTimezone: true }),
       delete_reason: varchar('delete_reason', { length: 20 }),
@@ -196,6 +198,7 @@ export const offering_branches = appSchema
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [
