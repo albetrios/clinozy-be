@@ -60,6 +60,9 @@
     "gitleaks",
     "semgrep",
     // Load-test runner invoked by load:* scripts.
-    "k6"
+    "k6",
+    // The JSON processor the runners ship; the Dependabot auto-merge policy test runs the
+    // workflow's own jq program on review fixtures (dependabot-auto-merge.policy.unit.test.ts).
+    "jq"
   ]
 }
