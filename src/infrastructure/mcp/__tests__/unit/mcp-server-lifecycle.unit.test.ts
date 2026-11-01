@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadMcpSdk, registerMcpRouteHandlers } from '@/infrastructure/mcp/mcp-server.js';
+import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 
 /**
  * The MCP route handlers end to end on a bare Fastify app, with the real SDK:
@@ -56,7 +57,7 @@ describe('MCP route handlers', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/mcp',
+      url: testApiPath('/mcp'),
       headers: MCP_HEADERS,
       payload: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
     });
@@ -71,7 +72,7 @@ describe('MCP route handlers', () => {
   it('calls an allowed /api/v1/ path through call_api', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/mcp',
+      url: testApiPath('/mcp'),
       headers: MCP_HEADERS,
       payload: callApiRequest('/api/v1/visible'),
     });
@@ -88,7 +89,7 @@ describe('MCP route handlers', () => {
   ])('refuses the traversal %s and never reaches the hidden route (C-3)', async (path) => {
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/mcp',
+      url: testApiPath('/mcp'),
       headers: MCP_HEADERS,
       payload: callApiRequest(path),
     });

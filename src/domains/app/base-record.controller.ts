@@ -49,13 +49,15 @@ const AUDIT_FILTER_VALUE_MAX = 200;
  */
 function auditFilters(query: unknown): Record<string, string | boolean> {
   const { after: _after, limit: _limit, q, ...filters } = (query ?? {}) as Record<string, unknown>;
-  const recorded: Record<string, string | boolean> = {};
+  // A Map, then own properties: a caller-chosen key such as `__proto__` is stored as a plain
+  // entry and never written through an object's prototype setter.
+  const recorded = new Map<string, string | boolean>();
   for (const [name, value] of Object.entries(filters)) {
     const text = auditFilterText(value);
-    if (text !== undefined) recorded[name] = text;
+    if (text !== undefined) recorded.set(name, text);
   }
-  if (q !== undefined && q !== '') recorded.has_search = true;
-  return recorded;
+  if (q !== undefined && q !== '') recorded.set('has_search', true);
+  return Object.fromEntries(recorded);
 }
 
 /**

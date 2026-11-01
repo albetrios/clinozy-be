@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateCallApiPolicy } from '@/infrastructure/mcp/mcp-capabilities.js';
+import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 
 /**
  * R14: the MCP `call_api` tool is an admin-authority in-process API proxy. `evaluateCallApiPolicy`
@@ -12,7 +13,7 @@ describe('evaluateCallApiPolicy (R14)', () => {
   it('allows GET to /api/v1/ paths by default', () => {
     expect(evaluateCallApiPolicy({ ...base, method: 'GET', path: '/api/v1/audit/logs' })).toEqual({
       allowed: true,
-      url: '/api/v1/audit/logs',
+      url: testApiPath('/audit/logs'),
     });
   });
 
@@ -55,7 +56,7 @@ describe('evaluateCallApiPolicy (R14)', () => {
         method: 'DELETE',
         path: '/api/v1/tenancy/organization',
       }),
-    ).toEqual({ allowed: true, url: '/api/v1/tenancy/organization' });
+    ).toEqual({ allowed: true, url: testApiPath('/tenancy/organization') });
   });
 
   it('enforces the optional path-prefix allowlist when configured', () => {
@@ -67,7 +68,7 @@ describe('evaluateCallApiPolicy (R14)', () => {
         method: 'GET',
         path: '/api/v1/audit/logs',
       }),
-    ).toEqual({ allowed: true, url: '/api/v1/audit/logs' });
+    ).toEqual({ allowed: true, url: testApiPath('/audit/logs') });
 
     const blocked = evaluateCallApiPolicy({
       allowMutations: false,
@@ -117,6 +118,6 @@ describe('evaluateCallApiPolicy (R14)', () => {
   it('keeps the query string and screens only the path part', () => {
     expect(
       evaluateCallApiPolicy({ ...base, method: 'GET', path: '/api/v1/audit/logs?next=../x%2Fy' }),
-    ).toEqual({ allowed: true, url: '/api/v1/audit/logs?next=../x%2Fy' });
+    ).toEqual({ allowed: true, url: testApiPath('/audit/logs?next=../x%2Fy') });
   });
 });
