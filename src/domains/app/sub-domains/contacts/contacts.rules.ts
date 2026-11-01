@@ -125,6 +125,7 @@ async function applyTypedAge({
       years: values.age,
     });
     const databaseToday = calendarDateInTimeZone({ timeZone: DATABASE_TIME_ZONE });
+    // biome-ignore lint/complexity/useMathMinMax: compares YYYY-MM-DD strings; Math.min would return NaN
     values.date_of_birth = approximate > databaseToday ? databaseToday : approximate;
     values.date_of_birth_is_approximate = true;
   } else if ('date_of_birth' in values) {

@@ -22,5 +22,5 @@ export async function getProviderPauseLeftMs(
   queue: Pick<Queue, 'getRateLimitTtl'>,
 ): Promise<number> {
   const pauseLeftMs = await queue.getRateLimitTtl(PAUSE_SENTINEL_MAX_JOBS);
-  return pauseLeftMs > 0 ? pauseLeftMs : 0;
+  return Math.max(pauseLeftMs, 0);
 }

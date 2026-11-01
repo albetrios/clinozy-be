@@ -41,6 +41,14 @@ updates:
       - dependency-name: '@types/node'
         update-types:
           - 'version-update:semver-major'
+      # nock 15.0.3+ never ends a mocked reply whose Content-Length is set and whose body is
+      # empty, so the S3 HEAD contract test hangs (a real HEAD carries Content-Length, no body).
+      # Held at 15.0.2; a later release comes through and the contract lane checks it.
+      - dependency-name: 'nock'
+        versions:
+          - '15.0.3'
+          - '15.0.4'
+          - '15.0.5'
     groups:
       # Low risk: patch + minor across production and development dependencies.
       # Auto-merged (after approval) by dependabot-auto-merge.yml.

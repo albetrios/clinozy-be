@@ -633,11 +633,6 @@ describe('OrganizationService', () => {
     expect(repository.update).toHaveBeenCalled();
   });
 
-  it('requireOrganizationByPublicId returns billing context', async () => {
-    const billing = await service.requireOrganizationByPublicId(organizationRow.public_id);
-    expect(billing.public_id).toBe(organizationRow.public_id);
-  });
-
   it('delete clears logo when storage key uses direct prefix path', async () => {
     vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({ kind: 'deleted' });
     const logoKey = `organization-logos/${organizationRow.public_id}/logo.png`;

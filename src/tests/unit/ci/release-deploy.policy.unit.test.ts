@@ -26,6 +26,7 @@ describe('release-deploy production policy', () => {
     expect(job).toMatch(/\n {4}environment: development\n/);
     // the steps test the value, not a job-level `if` (one may be evaluated before the environment applies)
     expect(job).not.toMatch(/\n {4}if:/);
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal GitHub Actions expression
     expect(job).toContain('base-url: ${{ vars.DEVELOPMENT_API_URL }}');
   });
 
