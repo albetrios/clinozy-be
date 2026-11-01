@@ -14,6 +14,10 @@
 # variables are visible to anyone who can edit the environment — there is no
 # secrets store.
 #
+# Version: GH_VERSION in tool-versions.sh (an environment variable of that name wins, a trial),
+# never the latest release, and the release tarball must match its pinned SHA-256 (H-12). The
+# apt fallbacks below install a package apt has verified against its repository's signing key.
+#
 # Idempotent and best-effort: never hard-fails the setup chain over an optional
 # tool. Output goes to stderr (diagnostics).
 set -uo pipefail
@@ -23,31 +27,35 @@ if command -v gh >/dev/null 2>&1; then
   exit 0
 fi
 
-# 1) Distro package first — present on the cloud image; needs only the Ubuntu
-#    mirrors (in the default Trusted allowlist).
+# shellcheck source=tool-install.lib.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tool-install.lib.sh"
+
+# 1) The pinned release binary from github.com (in the default Trusted allowlist), SHA-256-verified
+#    against the pin. No apt repo or extra allowlist entry needed.
+if [ "$(uname -s)" = "Linux" ]; then
+  gh_version="$(pinned_version GH_VERSION)"
+  gh_architecture="$(linux_architecture)"
+  gh_tarball="gh_${gh_version}_linux_${gh_architecture}.tar.gz"
+  gh_url="https://github.com/cli/cli/releases/download/v${gh_version}/${gh_tarball}"
+  expected_sha256="$(pinned_version "GH_SHA256_LINUX_$(printf '%s' "${gh_architecture}" | tr '[:lower:]' '[:upper:]')")"
+  temporary_directory="$(mktemp -d)"
+  if [ -n "${gh_version}" ] \
+    && download_verified "${gh_url}" "${temporary_directory}/${gh_tarball}" "${expected_sha256}" \
+    && tar -xzf "${temporary_directory}/${gh_tarball}" -C "${temporary_directory}" 2>/dev/null \
+    && install -m 0755 "${temporary_directory}/gh_${gh_version}_linux_${gh_architecture}/bin/gh" /usr/local/bin/gh; then
+    rm -rf "${temporary_directory}"
+    echo "install-gh: installed $(gh --version | head -1) from the github.com release (SHA-256 verified)." >&2
+    exit 0
+  fi
+  rm -rf "${temporary_directory}"
+  echo "install-gh: the pinned github.com release is unavailable or unverified — trying apt." >&2
+fi
+
+# 2) Distro package — needs only the Ubuntu mirrors (in the default Trusted allowlist).
 if apt-get update >/dev/null 2>&1 && apt-get install -y gh >/dev/null 2>&1; then
   echo "install-gh: installed $(gh --version | head -1) via apt." >&2
   exit 0
 fi
-
-# 2) Official release binary from github.com (in the default Trusted allowlist).
-#    No apt repo or extra allowlist entry needed — github.com release assets are
-#    reachable on the default network policy, so this is the reliable cloud path.
-arch="$(dpkg --print-architecture)"
-version="$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
-  https://github.com/cli/cli/releases/latest 2>/dev/null | sed 's#.*/tag/v##')"
-if [ -n "${version}" ]; then
-  tarball="gh_${version}_linux_${arch}.tar.gz"
-  if curl -fsSL "https://github.com/cli/cli/releases/download/v${version}/${tarball}" \
-       -o "/tmp/${tarball}" 2>/dev/null; then
-    tar -xzf "/tmp/${tarball}" -C /tmp
-    install -m 0755 "/tmp/gh_${version}_linux_${arch}/bin/gh" /usr/local/bin/gh
-    rm -rf "/tmp/${tarball}" "/tmp/gh_${version}_linux_${arch}"
-    echo "install-gh: installed $(gh --version | head -1) from github.com release binary." >&2
-    exit 0
-  fi
-fi
-echo "install-gh: github.com release binary unavailable — trying the official GitHub CLI apt repo." >&2
 
 # 3) Fallback — official GitHub CLI apt repo (needs cli.github.com on the
 #    network allowlist; add it under Custom access if Trusted blocks it).

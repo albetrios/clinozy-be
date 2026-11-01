@@ -101,6 +101,13 @@ not match; CI appends the same file to `$GITHUB_ENV`. Policy and upgrade flow:
 5. One PR per bump — CI installs and runs the new version before it lands. **Rollback** = revert
    the line; every session moves back on its next bootstrap.
 
+**Node and gh** sit in the same file as plain release downloads, outside `AGENT_TOOLS`:
+`NODE_VERSION` (equal to `.nvmrc`) and `GH_VERSION`, each with a SHA-256 per architecture that
+`install-node.sh` / `install-gh.sh` verify. `--outdated` does not cover them: copy the checksums
+from `https://nodejs.org/dist/v<version>/SHASUMS256.txt` and the gh release's
+`gh_<version>_checksums.txt`; a Node bump moves `.nvmrc` and these lines together
+(`src/tests/unit/ci/pinned-installs.policy.unit.test.ts`).
+
 **Trial without a commit:** set the key (and its `*_SHA256_*` keys) as variables on a separate
 cloud environment — an environment variable overrides the pin. A version override without its
 checksum is refused.
