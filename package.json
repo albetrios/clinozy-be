@@ -295,7 +295,7 @@
     "@commitlint/config-conventional": "^21.2.4",
     "@faker-js/faker": "^10.6.0",
     "@microsoft/tsdoc": "^0.17.1",
-    "@opentelemetry/core": "^2.12.0",
+    "@opentelemetry/core": "^3.0.0",
     "@opentelemetry/sdk-trace-base": "^2.12.0",
     "@opentelemetry/sdk-trace-node": "^2.12.0",
     "@scalar/cli": "^2.13.2",
