@@ -54,7 +54,7 @@ export type CallApiPolicyResult =
   | { allowed: false; message: string };
 
 /** Origin the `call_api` path is resolved against; only compared, never fetched. */
-const CALL_API_PATH_BASE = 'http://call-api.invalid';
+const CALL_API_PATH_BASE = 'https://call-api.invalid';
 
 /**
  * A `.` or `..` path segment, raw or percent-encoded (`%2e`, any case), between separators or at
