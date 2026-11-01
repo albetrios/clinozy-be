@@ -32,3 +32,16 @@ tooling/db-viewer/.db-viewer-history/
 outputs/
 reports/
 coverage-*/
+
+# Local credentials and agent config — never in the build context, so never in an image (H-9).
+# `COPY . .` in the build stage would otherwise carry them: the setup tooling's credentials and
+# state, the env backups, and the MCP config (its `${VAR}` entries hold real API keys once a
+# developer fills them). The machine-local env file is covered by `.env.*` above.
+.setup/
+.setup-credentials
+.setup-state.*
+tooling/setup.secrets.json
+.backups/
+.mcp.json
+agent-os/mcp/mcp.json
+.understand-anything/
