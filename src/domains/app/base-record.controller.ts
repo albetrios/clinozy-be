@@ -51,10 +51,33 @@ function auditFilters(query: unknown): Record<string, string | boolean> {
   const { after: _after, limit: _limit, q, ...filters } = (query ?? {}) as Record<string, unknown>;
   const recorded: Record<string, string | boolean> = {};
   for (const [name, value] of Object.entries(filters)) {
-    if (value !== undefined) recorded[name] = String(value).slice(0, AUDIT_FILTER_VALUE_MAX);
+    const text = auditFilterText(value);
+    if (text !== undefined) recorded[name] = text;
   }
   if (q !== undefined && q !== '') recorded.has_search = true;
   return recorded;
+}
+
+/**
+ * A filter value as the audit row keeps it (cut to {@link AUDIT_FILTER_VALUE_MAX}): text as is,
+ * numbers and flags as their text, a list as its scalars joined with commas; anything else is dropped.
+ */
+function auditFilterText(value: unknown): string | undefined {
+  if (typeof value === 'string') return value.slice(0, AUDIT_FILTER_VALUE_MAX);
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return value.toString().slice(0, AUDIT_FILTER_VALUE_MAX);
+  }
+  if (Array.isArray(value)) {
+    const scalars = value.filter(
+      (entry): entry is string | number | boolean =>
+        typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean',
+    );
+    return scalars
+      .map((entry) => entry.toString())
+      .join(',')
+      .slice(0, AUDIT_FILTER_VALUE_MAX);
+  }
+  return undefined;
 }
 
 /** How many signed file links a read handed out (`file_url`, and each of `files[].file_url`). */

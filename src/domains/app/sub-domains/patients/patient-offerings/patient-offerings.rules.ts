@@ -25,7 +25,7 @@ async function assertSessionsRaiseAllowed({
   existing: Record<string, unknown>;
   context: BaseRecordWriteContext;
 }): Promise<void> {
-  if (!(typeof values.sessions_total === 'number')) return;
+  if (typeof values.sessions_total !== 'number') return;
   if (values.sessions_total <= Number(existing.sessions_total)) return;
   if (await context.can(APP_PERMISSIONS.OFFERING_UPDATE)) return;
   throw new ForbiddenError('errors:fieldNeedsPermission', {
