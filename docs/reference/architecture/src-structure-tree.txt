@@ -2498,6 +2498,7 @@ src/
     │   │   │   │   ├── registry-scheduler-consistency.unit.test.ts
     │   │   │   │   ├── scheduler-registry-audit.unit.test.ts
     │   │   │   │   ├── worker-connection-budget.unit.test.ts
+    │   │   │   │   ├── worker-failure-sanitizer.util.unit.test.ts
     │   │   │   │   ├── worker-queue-family.util.unit.test.ts
     │   │   │   │   └── worker-registration.registry.unit.test.ts
     │   │   ├── provider-outage-pause.util.ts
@@ -2506,6 +2507,7 @@ src/
     │   │   ├── shutdown-timing.util.ts
     │   │   ├── worker-close.util.ts
     │   │   ├── worker-connection-budget.ts
+    │   │   ├── worker-failure-sanitizer.util.ts
     │   │   ├── worker-health.server.ts
     │   │   ├── worker-options.ts
     │   │   ├── worker-pool-demand-context.ts
@@ -3090,6 +3092,7 @@ src/
     │   │   ├── stripe-webhook-enqueue-dedupe.integration.test.ts
     │   │   ├── subscription-seat-sync-serialization.integration.test.ts
     │   │   ├── transactional-outbox.integration.test.ts
+    │   │   ├── worker-failure-redaction.integration.test.ts
     │   │   └── worker-shutdown.integration.test.ts
     │   ├── runtime/
     │   │   ├── health.integration.test.ts

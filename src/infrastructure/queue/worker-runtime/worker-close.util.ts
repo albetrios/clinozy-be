@@ -1,6 +1,7 @@
 import type { Worker } from 'bullmq';
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 import { getRemainingShutdownBudgetMs } from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
+import { sanitizeWorkerFailures } from '@/infrastructure/queue/worker-runtime/worker-failure-sanitizer.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 /** Bounded close for bootstrap handles; falls back to handle.close() for scheduler-only handles. */
@@ -61,7 +62,9 @@ export async function closeWorkerWithTimeout({
 /**
  * Wraps a freshly constructed BullMQ {@link Worker} in the {@link WorkerHandle} contract
  * that bootstrap returns: `close()` delegates to {@link closeWorkerWithTimeout} so every
- * domain worker shuts down with the same bounded drain semantics.
+ * domain worker shuts down with the same bounded drain semantics, and the worker records a
+ * database failure only in its sanitized form ({@link sanitizeWorkerFailures}, C-1) — so no bound
+ * value reaches a failed job's `failedReason` or `stacktrace` in Redis.
  */
 export function buildWorkerHandle({
   worker,
@@ -70,6 +73,7 @@ export function buildWorkerHandle({
   worker: Worker;
   queueName: string;
 }): WorkerHandle {
+  sanitizeWorkerFailures(worker);
   return {
     worker,
     queueName,
