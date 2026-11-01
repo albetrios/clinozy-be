@@ -167,12 +167,12 @@ function computeNextRetryAt(attemptsMadeBefore: number): Date | null {
  * - **Algorithm:** identical signature to the global `fetch`.
  * - **Failure modes:** errors propagate from the underlying implementation.
  * - **Side effects:** none on its own.
- * - **Notes:** the worker substitutes a DNS-pinned, allowlisted `fetch` for production calls
- *   and accepts the raw global `fetch` only as the test default.
+ * - **Notes:** with no injected implementation the worker always builds the DNS-pinned,
+ *   allowlisted `fetch` ({@link createPinnedWebhookFetch}); only an explicitly injected
+ *   `fetchImplementation` (the test seam) replaces it. A replaced `globalThis.fetch` changes
+ *   nothing (C-4).
  */
 export type WebhookDeliveryFetch = typeof fetch;
-
-const defaultWebhookDeliveryFetch = globalThis.fetch;
 
 /** Job-level context threaded through the three delivery phases. */
 interface WebhookDeliveryJobContext {
@@ -505,7 +505,8 @@ const HTTP_STATUS_GONE = 410;
 async function deliverClaimedWebhook(options: {
   organizationPublicId: string;
   jobContext: WebhookDeliveryJobContext;
-  fetchImplementation: WebhookDeliveryFetch;
+  /** Test seam; when absent the delivery always goes through the DNS-pinned fetch. */
+  fetchImplementation?: WebhookDeliveryFetch | undefined;
   deliveryAttemptRepository?: WebhookDeliveryAttemptRepository | undefined;
   deliveryContext: WebhookDeliveryAttemptWithWebhook;
 }): Promise<WebhookDeliveryJobResult> {
@@ -572,10 +573,9 @@ async function deliverClaimedWebhook(options: {
 
   let response: Response;
   try {
-    const pinnedFetch =
-      fetchImplementation === defaultWebhookDeliveryFetch
-        ? await createPinnedWebhookFetch(webhookUrl)
-        : fetchImplementation;
+    // C-4: pinned unless a test injected its own fetch — never decided by comparing against
+    // `globalThis.fetch`, which instrumentation or a library may have replaced.
+    const deliveryFetch = fetchImplementation ?? (await createPinnedWebhookFetch(webhookUrl));
     response = await outboundCall(
       buildOutboundCallOptions({
         name: 'webhook',
@@ -598,7 +598,7 @@ async function deliverClaimedWebhook(options: {
               body: payloadString,
               signal,
             },
-            fetchImplementation: pinnedFetch,
+            fetchImplementation: deliveryFetch,
           }),
       }),
     );
@@ -685,7 +685,8 @@ async function deliverClaimedWebhook(options: {
  * - **Side effects:** outbound HTTPS POST; updates to `webhook_delivery_attempts` (and
  *   `webhooks.is_enabled` on a 410); structured logs at every transition.
  * - **Notes:** the dependency-injection seam (`fetchImplementation`, `deliveryAttemptRepository`)
- *   is exclusively for unit tests; production paths must use the pinned fetch and the
+ *   is exclusively for tests; with `fetchImplementation` omitted the delivery always uses the
+ *   DNS-pinned fetch, whatever `globalThis.fetch` currently is (C-4), and production paths use the
  *   worker-scoped repository factories.
  */
 export async function processWebhookDeliveryAttempt(options: {
@@ -716,7 +717,7 @@ export async function processWebhookDeliveryAttempt(options: {
   return deliverClaimedWebhook({
     organizationPublicId,
     jobContext,
-    fetchImplementation: options.fetchImplementation ?? globalThis.fetch,
+    fetchImplementation: options.fetchImplementation,
     deliveryAttemptRepository,
     deliveryContext: claim.deliveryContext,
   });
@@ -740,9 +741,13 @@ export async function processWebhookDeliveryAttempt(options: {
  * - **Notes:** the worker never holds a Postgres pool checkout while the outbound request is in
  *   flight (claim and record run in separate short transactions); concurrency comes from
  *   `getWorkerConcurrencyWebhook()`; the returned handle is wired into bootstrap for graceful
- *   shutdown and lock release.
+ *   shutdown and lock release. `options.fetchImplementation` is the explicit test seam (a chaos
+ *   suite observing outbound calls); production registration passes nothing, so every delivery
+ *   uses the DNS-pinned fetch.
  */
-export function createWebhookDeliveryWorker(): WorkerHandle {
+export function createWebhookDeliveryWorker(
+  options: { fetchImplementation?: WebhookDeliveryFetch } = {},
+): WorkerHandle {
   const worker = new Worker<WebhookDeliveryJobData>(
     WEBHOOK_DELIVERY_QUEUE_NAME,
     async (job) => {
@@ -759,6 +764,7 @@ export function createWebhookDeliveryWorker(): WorkerHandle {
           processWebhookDeliveryAttempt({
             deliveryAttemptPublicId,
             organizationPublicId,
+            ...omitUndefined({ fetchImplementation: options.fetchImplementation }),
             jobContext: omitUndefined({
               id: job.id,
               attemptsMade: job.attemptsMade,
