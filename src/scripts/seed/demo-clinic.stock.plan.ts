@@ -911,6 +911,7 @@ class MedicalStorePlanner {
         sale: {
           person: walkIn.person,
           branch: walkIn.branch,
+          // biome-ignore lint/complexity/useMathMinMax: compares YYYY-MM-DD strings; Math.min would return NaN
           at: at({ date: day > today ? today : day, minutes: 1050 }),
         },
         wants: [{ medicine: 'suncros', quantity: 1 }],

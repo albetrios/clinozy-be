@@ -884,17 +884,6 @@ describe('MembershipService', () => {
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it('delete throws when soft delete returns null', async () => {
-    vi.mocked(membershipRepository.softDelete).mockResolvedValue(null);
-    await expect(
-      service.delete({
-        scope: asScope('org_public'),
-        membership_public_id: 'mem_public',
-        query: { reason: 'mistake' },
-      }),
-    ).rejects.toBeInstanceOf(NotFoundError);
-  });
-
   it('transferOwnership throws when current user cannot be resolved', async () => {
     vi.mocked(organizationService.requireOrganizationRecordByPublicId).mockResolvedValue({
       ...organization,

@@ -154,6 +154,12 @@ function createMembershipWriteHandlers(service: MembershipService) {
       });
       return reply.code(204).send();
     },
+  };
+}
+
+/** The lifecycle handlers — revoke a pending invitation, restore a removed member; each audited. */
+function createMembershipLifecycleHandlers(service: MembershipService) {
+  return {
     revokeInvitation: async (request: FastifyRequest, reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
@@ -262,6 +268,7 @@ export function createMembershipController(service: MembershipService) {
   return {
     ...createMembershipReadHandlers(service),
     ...createMembershipWriteHandlers(service),
+    ...createMembershipLifecycleHandlers(service),
     ...createMembershipSelfServiceHandlers(service),
   };
 }
