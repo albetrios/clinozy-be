@@ -3571,6 +3571,7 @@ src/
     │   │   ├── agent-docker-daemon-script.unit.test.ts
     │   │   ├── agent-edit-hooks.unit.test.ts
     │   │   ├── agent-gate-failure-hint.unit.test.ts
+    │   │   ├── agent-guard-fail-closed.policy.unit.test.ts
     │   │   ├── agent-guard-hooks.unit.test.ts
     │   │   ├── agent-hook-runtime.policy.unit.test.ts
     │   │   ├── agent-hooks-telemetry.unit.test.ts

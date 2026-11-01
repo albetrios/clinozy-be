@@ -569,9 +569,15 @@ describe('agent guard hooks', () => {
   }
 });
 
+/**
+ * The BLOCK guard that fails CLOSED instead (H-6): an unreadable payload blocks the call (exit 2),
+ * pinned by agent-guard-fail-closed.policy.unit.test.ts.
+ */
+const FAILS_CLOSED = new Set(['be-guardrails']);
+
 /** Every manifest hook must exit 0 on empty and non-JSON stdin — a hook bug must never brick a session. */
 describe('every manifest hook fails open', () => {
-  for (const entry of manifest.hooks) {
+  for (const entry of manifest.hooks.filter((hook) => !FAILS_CLOSED.has(hook.id))) {
     it(
       `${entry.id} exits 0 on empty and garbage stdin`,
       () => {

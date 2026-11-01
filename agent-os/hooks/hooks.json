@@ -1,5 +1,5 @@
 {
-  "description": "Single source of truth for agent hook wiring. tooling/agent-os/generate.ts derives the platform hook configs under agent-os/platforms/ — claude/settings.json (hooks block), cursor/hooks.json, codex/hooks.json — which .claude/settings.json, .cursor/hooks.json, and .codex/hooks.json symlink to; agent-os:generate:check fails on drift. Each entry may target Claude, Cursor, and/or Codex; the generator emits a hook for an agent only when the agent supports that event (platforms/targets.json).",
+  "description": "Single source of truth for agent hook wiring. tooling/agent-os/generate.ts derives the platform hook configs under agent-os/platforms/ — claude/settings.json (hooks block), cursor/hooks.json, codex/hooks.json — which .claude/settings.json, .cursor/hooks.json, and .codex/hooks.json symlink to; agent-os:generate:check fails on drift. Each entry may target Claude, Cursor, and/or Codex; the generator emits a hook for an agent only when the agent supports that event (platforms/targets.json). Every hook FAILS OPEN except be-guardrails (the destructive-command and secret guard), which fails CLOSED: an error in it blocks the call (H-6).",
   "hooks": [
     {
       "id": "be-session-start",

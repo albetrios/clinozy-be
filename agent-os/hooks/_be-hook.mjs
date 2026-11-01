@@ -5,7 +5,10 @@
 // payload or judge "this repository" differently.
 //
 // Fails open: a payload that cannot be read or parsed is `null`, and each hook then exits 0
-// (allows the action) — a hook bug must never brick a session.
+// (allows the action) — a hook bug must never brick a session. The one exception is a BLOCK guard
+// (be-guardrails.mjs, the destructive-command and secret guard): it fails CLOSED through
+// failClosed() and readGuardPayload() below, since a guard that lets a call through whenever it
+// breaks guards nothing (H-6).
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,6 +40,40 @@ export function readHookPayload() {
   } catch {
     return null;
   }
+}
+
+/** The exit status Claude Code reads from a PreToolUse hook as "block the call" (stderr reaches the model). */
+const BLOCKING_EXIT_STATUS = 2;
+
+/**
+ * Makes a BLOCK guard fail CLOSED (H-6): from this call on, an error the guard does not handle — a
+ * throw, a rejected promise — blocks the tool call (exit 2, the reason on stderr) instead of the
+ * default crash, whose non-zero status Claude Code reads as a hook error and lets the call
+ * through. Returns the blocker, for a guard to call itself (a module it could not load).
+ */
+export function failClosed(guard) {
+  const block = (error) => {
+    const reason = error instanceof Error ? error.message : String(error);
+    process.stderr.write(
+      `${guard} could not check this call, so it is blocked (the guard fails closed): ${reason}\n`,
+    );
+    process.exit(BLOCKING_EXIT_STATUS);
+  };
+  process.on("uncaughtException", block);
+  process.on("unhandledRejection", block);
+  return block;
+}
+
+/**
+ * The payload for a BLOCK guard: `null` only on a terminal (a hand run, nothing to guard). A
+ * payload that cannot be read or parsed blocks the call, where readHookPayload lets it through.
+ */
+export function readGuardPayload(guard) {
+  if (process.stdin.isTTY) return null;
+  const payload = readHookPayload();
+  if (payload) return payload;
+  failClosed(guard)(new Error("its payload could not be read"));
+  return null;
 }
 
 /**
