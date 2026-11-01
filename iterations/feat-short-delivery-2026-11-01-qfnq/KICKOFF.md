@@ -39,9 +39,9 @@ reads (`is_short`, `short_line_count`); docs, OpenAPI, tests, seeds where they w
 
 | # | Work item | Kind | Depends on | Skill/driver | Acceptance | Assignee | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | The line's received quantities: schema, migration + fill, DTO, rules, repository, serializer, docs (SHC1, SHC2) | sub-domain | — | `/be-build-requirement` (schema chain; route chain) | A-1 – A-6 | Claude | planned |
-| 2 | Tests, seeds, OpenAPI, overview (SHC3) | feature | 1 | `be-test-generator`, `be-seed-maintainer` | A-1 – A-6 | Claude | planned |
-| 3 | Acceptance, frontend route map, gates | flow | 1, 2 | `be-kickoff-iteration` › Close | A-1 – A-7 | Claude | planned |
+| 1 | The line's received quantities: schema, migration + fill, DTO, rules, repository, serializer, docs (SHC1, SHC2) | sub-domain | — | `/be-build-requirement` (schema chain; route chain) | A-1 – A-6 | Claude | done |
+| 2 | Tests, seeds, OpenAPI, overview (SHC3) | feature | 1 | `be-test-generator`, `be-seed-maintainer` | A-1 – A-6 | Claude | done |
+| 3 | Acceptance, frontend route map, gates | flow | 1, 2 | `be-kickoff-iteration` › Close | A-1 – A-7 | Claude | done |
 
 ## 6. Requirements index
 

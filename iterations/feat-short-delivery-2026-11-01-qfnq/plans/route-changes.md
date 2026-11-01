@@ -9,9 +9,9 @@ Intake mode `brief` · Intake hash `d03c5ab0bf5a` · 2026-11-01.
 
 | # | Change | Method | Path | Access | Operation | Source | Built |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-1 | CHANGED — an ordered line takes `received_quantity`, `received_free_quantity` | POST | `/api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/receive` | medicine · update | receive goods | `BRIEF.md:15–22` | |
-| RC-2 | CHANGED — output: lines `received_quantity`, `received_free_quantity`, `is_short`; order `short_line_count` | GET | `/api/v1/app/medical-purchase-orders/{medical_purchase_order_id}` | medicine · read | one order | `BRIEF.md:23` | |
-| RC-3 | CHANGED — output, as RC-2 | GET | `/api/v1/app/medical-purchase-orders` | medicine · read | list | `BRIEF.md:23` | |
+| RC-1 | CHANGED — an ordered line takes `received_quantity`, `received_free_quantity` | POST | `/api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/receive` | medicine · update | receive goods | `BRIEF.md:15–22` | as proposed — `4aa280b` ([AS-BUILT #1](../AS-BUILT.md)) |
+| RC-2 | CHANGED — output: lines `received_quantity`, `received_free_quantity`, `is_short`; order `short_line_count` | GET | `/api/v1/app/medical-purchase-orders/{medical_purchase_order_id}` | medicine · read | one order | `BRIEF.md:23` | as proposed — `4aa280b` ([AS-BUILT #1](../AS-BUILT.md)) |
+| RC-3 | CHANGED — output, as RC-2 | GET | `/api/v1/app/medical-purchase-orders` | medicine · read | list | `BRIEF.md:23` | as proposed — `4aa280b` ([AS-BUILT #1](../AS-BUILT.md)) |
 
 ## Before → after
 

@@ -23,3 +23,4 @@ drawer takes received quantities, the order view marks short lines; straight thr
 | **SD11** — The amount check | keep `quantity × rate` · use the received quantity once received | **`coalesce(received_quantity, quantity) × rate`** is the amount (inclusive) or the taxable value (exclusive) | 2026-11-01 | Claude (be-sql-design-guard) | AMBER |
 | **SD12** — Route review, sub-domain 1 | confirm · change | **Confirmed, final (rev 1)** — 0 routes new, 3 changed (receive input, order output) | 2026-11-01 | the user (straight through) · Claude | RED |
 | **SD13** — Approval | approve · send back | **Approved** — straight through | 2026-11-01 | the user · Claude | RED |
+| **SD14** — The demo clinic's received lines | leave the received columns empty · fill them | **Filled:** the demo clinic's seed writes received = ordered on received lines — the new check requires them | 2026-11-01 | Claude (be-seed-maintainer) | SCOPE |
