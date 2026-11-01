@@ -62,7 +62,8 @@ const medicalPurchaseOrderItemDto = medicalPurchaseOrderItemFields
 
 /**
  * How an ordered line arrived (MD16): ticked (default) or not, its batch number, expiry and the
- * MRP printed on it (the order line's unless sent).
+ * MRP printed on it (the order line's unless sent), and the packs and free packs that came
+ * (`received_quantity`, `received_free_quantity` — what was ordered unless sent; feat-short-delivery).
  */
 const receivedOrderedLineDto = z
   .object({
@@ -71,6 +72,8 @@ const receivedOrderedLineDto = z
     batch_number: trimmedStringMinMax({ min: 1, max: 20 }).optional(),
     expiry_month: expiryMonthSchema.optional(),
     mrp: printedMrpSchema.nullable().optional(),
+    received_quantity: z.number().int().min(0).max(MEDICINE_QUANTITY_MAX).optional(),
+    received_free_quantity: z.number().int().min(0).max(MEDICINE_QUANTITY_MAX).optional(),
   })
   .strict();
 

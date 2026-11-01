@@ -954,6 +954,8 @@ class DemoClinicWriter {
           taxable_amount: rupeesText(gst.taxablePaise),
           gst_amount: rupeesText(gst.gstPaise),
           is_received: batch ? true : null,
+          received_quantity: batch ? line.quantity : null,
+          received_free_quantity: batch ? line.freeQuantity : null,
           batch_number: batch?.batchNumber ?? null,
           expiry_month: batch?.expiryMonth ?? null,
           medicine_batch_id: line.batch === undefined ? null : batchIds[line.batch]!,

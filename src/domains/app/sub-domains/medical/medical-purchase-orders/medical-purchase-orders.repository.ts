@@ -27,6 +27,9 @@ export interface MedicalPurchaseOrderItemReadRow {
   taxable_amount: string;
   gst_amount: string;
   is_received: boolean | null;
+  received_quantity: number | null;
+  received_free_quantity: number | null;
+  is_short: boolean | null;
   batch_number: string | null;
   expiry_month: string | null;
 }
@@ -42,6 +45,8 @@ export interface MedicalPurchaseOrderItemRow {
   rate: string;
   mrp: string | null;
   amount: string;
+  gst_percent: number;
+  is_gst_inclusive: boolean;
   taxable_amount: string;
   gst_amount: string;
 }
@@ -133,6 +138,9 @@ export class MedicalPurchaseOrdersRepository extends BaseRecordRepository {
         taxable_amount: medical_purchase_order_items.taxable_amount,
         gst_amount: medical_purchase_order_items.gst_amount,
         is_received: medical_purchase_order_items.is_received,
+        received_quantity: medical_purchase_order_items.received_quantity,
+        received_free_quantity: medical_purchase_order_items.received_free_quantity,
+        is_short: medical_purchase_order_items.is_short,
         batch_number: medical_purchase_order_items.batch_number,
         expiry_month: medical_purchase_order_items.expiry_month,
       })
@@ -158,6 +166,8 @@ export class MedicalPurchaseOrdersRepository extends BaseRecordRepository {
         rate: medical_purchase_order_items.rate,
         mrp: medical_purchase_order_items.mrp,
         amount: medical_purchase_order_items.amount,
+        gst_percent: medical_purchase_order_items.gst_percent,
+        is_gst_inclusive: medical_purchase_order_items.is_gst_inclusive,
         taxable_amount: medical_purchase_order_items.taxable_amount,
         gst_amount: medical_purchase_order_items.gst_amount,
       })
@@ -209,15 +219,25 @@ export class MedicalPurchaseOrdersRepository extends BaseRecordRepository {
         rate: medical_purchase_order_items.rate,
         mrp: medical_purchase_order_items.mrp,
         amount: medical_purchase_order_items.amount,
+        gst_percent: medical_purchase_order_items.gst_percent,
+        is_gst_inclusive: medical_purchase_order_items.is_gst_inclusive,
         taxable_amount: medical_purchase_order_items.taxable_amount,
         gst_amount: medical_purchase_order_items.gst_amount,
       });
   }
 
-  /** MD16: what receiving did to one line — ticked or not, its MRP, and the batch it went into. */
+  /**
+   * MD16, feat-short-delivery: what receiving did to one line — ticked or not, what arrived and
+   * what it now comes to, its MRP, and the batch it went into.
+   */
   async markItemReceived(options: {
     id: number;
     isReceived: boolean;
+    received: {
+      quantity: number;
+      freeQuantity: number;
+      money: { amount: string; taxable_amount: string; gst_amount: string };
+    } | null;
     batchNumber: string | null;
     expiryMonth: string | null;
     mrp: string | null;
@@ -227,6 +247,9 @@ export class MedicalPurchaseOrdersRepository extends BaseRecordRepository {
       .update(medical_purchase_order_items)
       .set({
         is_received: options.isReceived,
+        received_quantity: options.received?.quantity ?? null,
+        received_free_quantity: options.received?.freeQuantity ?? null,
+        ...(options.received ? options.received.money : {}),
         mrp: options.mrp,
         batch_number: options.batchNumber,
         expiry_month: options.expiryMonth,

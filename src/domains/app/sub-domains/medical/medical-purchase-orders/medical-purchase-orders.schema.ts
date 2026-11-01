@@ -190,7 +190,9 @@ export const medical_purchase_orders = appSchema
  *
  * @remarks
  * - **Notes:** `amount` = `taxable_amount` + `gst_amount` (the invoice calculation, PG4) —
- *   quantity × rate when `is_gst_inclusive`, quantity × rate plus GST otherwise; `is_received` is null until the order is received;
+ *   quantity × rate when `is_gst_inclusive`, quantity × rate plus GST otherwise — the received
+ *   quantity once received (feat-short-delivery SD6); `received_quantity` /
+ *   `received_free_quantity` record what arrived and `is_short` (generated) whether it fell short; `is_received` is null until the order is received;
  *   a received line names the batch it went into. The medicine and batch stay (`RESTRICT`); the
  *   line goes with its order. RLS on the organization GUC.
  */
@@ -221,6 +223,14 @@ export const medical_purchase_order_items = appSchema
       taxable_amount: numeric('taxable_amount', { precision: 12, scale: 2 }).notNull(),
       gst_amount: numeric('gst_amount', { precision: 12, scale: 2 }).notNull(),
       is_received: boolean('is_received'),
+      received_quantity: integer('received_quantity'),
+      received_free_quantity: integer('received_free_quantity'),
+      is_short: boolean('is_short').generatedAlwaysAs(
+        (): SQL =>
+          sql.raw(
+            'coalesce(is_received, false) AND (received_quantity < quantity OR received_free_quantity < free_quantity)',
+          ),
+      ),
       batch_number: varchar('batch_number', { length: 20 }),
       expiry_month: date('expiry_month', { mode: 'string' }),
       medicine_batch_id: bigint('medicine_batch_id', { mode: 'number' }).references(
@@ -259,7 +269,12 @@ export const medical_purchase_order_items = appSchema
       // PG4: quantity × rate is the amount when the rate includes GST, the taxable value otherwise
       check(
         'chk_medical_purchase_order_items_amount',
-        sql`${table.taxable_amount} >= 0 AND ${table.gst_amount} >= 0 AND ${table.amount} = ${table.taxable_amount} + ${table.gst_amount} AND ${table.quantity} * ${table.rate} = CASE WHEN ${table.is_gst_inclusive} THEN ${table.amount} ELSE ${table.taxable_amount} END`,
+        sql`${table.taxable_amount} >= 0 AND ${table.gst_amount} >= 0 AND ${table.amount} = ${table.taxable_amount} + ${table.gst_amount} AND coalesce(${table.received_quantity}, ${table.quantity}) * ${table.rate} = CASE WHEN ${table.is_gst_inclusive} THEN ${table.amount} ELSE ${table.taxable_amount} END`,
+      ),
+      // feat-short-delivery SD3, SD7: what arrived — set exactly once received, 0…what was ordered
+      check(
+        'chk_medical_purchase_order_items_received',
+        sql`(${table.is_received} IS TRUE) = (${table.received_quantity} IS NOT NULL) AND (${table.received_quantity} IS NULL) = (${table.received_free_quantity} IS NULL) AND ${table.received_quantity} BETWEEN 0 AND ${table.quantity} AND ${table.received_free_quantity} BETWEEN 0 AND ${table.free_quantity}`,
       ),
       check(
         'chk_medical_purchase_order_items_expiry_month',

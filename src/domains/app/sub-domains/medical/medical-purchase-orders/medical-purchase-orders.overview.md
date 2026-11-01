@@ -57,6 +57,12 @@ What the store orders from its suppliers — ordered, then received into batches
   paisa; `amount = taxable_amount + gst_amount` (quantity × rate when inclusive, GST on top when
   not). The order stores `taxable_total` and `gst_total`, `total = taxable_total + gst_total` —
   its lines' while ordered, the received lines' once received.
+- **Short deliveries (feat-short-delivery SD3–SD11):** receive takes each ordered line's
+  `received_quantity` / `received_free_quantity` (what was ordered unless sent, 0…ordered — more is a
+  400 `items`; both 0 is not received); the batch takes the packs that came × `units_per_pack`; the
+  line's amount, taxable value and GST become the received quantity × rate's, and the totals and
+  `due_amount` follow; `is_short` (generated) marks a line that came short — the order counts them in
+  `short_line_count`. A short line closes: no later delivery.
 - **Purchase GST summary (PG9, PG11–PG13):** `month` (`YYYY-MM`, not after this month) — the
   received lines of the live orders received in that month (organization time zone), `by_rate`,
   `by_hsn` (the medicine's HSN code and rate) and `totals`; its CSV one row per group with a

@@ -268,8 +268,9 @@ function defaultExpiryMonth(orderDate: string): string {
 /**
  * MD16: one received line goes into its batch — a new one, or the medicine's batch of that number
  * (another expiry is a 409 `record_already_exists`), its rate now this line's and its MRP the
- * line's when the line has one (D8) — and adds `quantity + free_quantity` packs, as units (× the
- * medicine's units per pack, D5); the supplier's price follows. Returns the batch id.
+ * line's when the line has one (D8) — and adds the packs that came (free ones included,
+ * feat-short-delivery), as units (× the medicine's units per pack, D5); the supplier's price
+ * follows. Returns the batch id.
  */
 async function receiveLine(options: {
   order: BaseRecordRow;
@@ -277,6 +278,8 @@ async function receiveLine(options: {
   batchNumber: string;
   expiryMonth: string;
   mrp: string | null;
+  /** The packs that came, free ones included (feat-short-delivery). */
+  packs: number;
   context: BaseRecordWriteContext;
 }): Promise<number> {
   const { order, line, context } = options;
@@ -316,7 +319,7 @@ async function receiveLine(options: {
   await moveMedicineBatch({
     context,
     batchId,
-    change: (line.quantity + line.free_quantity) * unitsPerPack,
+    change: options.packs * unitsPerPack,
   });
   await medicinesRepository.upsertPrice({
     medicineId: line.medicine_id,
@@ -330,15 +333,40 @@ async function receiveLine(options: {
 /** How one line arrived — ticked or not, its batch, expiry and MRP as sent (defaults otherwise). */
 interface ReceivedLineChoice {
   is_received?: boolean | undefined;
+  received_quantity?: number | undefined;
+  received_free_quantity?: number | undefined;
   batch_number?: string | undefined;
   expiry_month?: string | undefined;
   mrp?: number | null | undefined;
 }
 
 /**
- * MD16: one line of a receive — ticked (default) it goes into its batch (number default
- * `NEW-<order number>`, expiry default 24 months on) and counts in the totals; either way the
- * line records how it arrived. Returns what it adds to the totals — nothing when ticked off.
+ * feat-short-delivery SD4, SD7: what came of one ordered line — the packs and free packs sent, else
+ * what was ordered; more than ordered is a 400 `items` (an unexpected line takes the extra).
+ */
+function receivedPacks(options: {
+  line: MedicalPurchaseOrderItemRow;
+  choice: ReceivedLineChoice | undefined;
+}): { quantity: number; freeQuantity: number } {
+  const { line, choice } = options;
+  const quantity = choice?.received_quantity ?? line.quantity;
+  const freeQuantity = choice?.received_free_quantity ?? line.free_quantity;
+  if (quantity > line.quantity || freeQuantity > line.free_quantity) {
+    throw fieldValidationError({
+      field: 'items',
+      messageKey: 'errors:validation.medicalPurchaseOrderReceivedOverOrdered',
+      messageParams: { id: line.public_id },
+    });
+  }
+  return { quantity, freeQuantity };
+}
+
+/**
+ * MD16, feat-short-delivery: one line of a receive — ticked (default) it goes into its batch
+ * (number default `NEW-<order number>`, expiry default 24 months on) with the packs that came
+ * (SD4; what was ordered unless sent), and it now comes to what arrived (SD6 — received × rate by
+ * the invoice calculation); nothing that came (0 + 0) is not received (SD8). Either way the line
+ * records how it arrived. Returns what it adds to the totals — nothing when not received.
  */
 async function receiveOrderLine(options: {
   repository: MedicalPurchaseOrdersRepository;
@@ -348,7 +376,8 @@ async function receiveOrderLine(options: {
   context: BaseRecordWriteContext;
 }): Promise<PurchaseLineMoney | null> {
   const { repository, order, line, choice, context } = options;
-  const isReceived = choice?.is_received ?? true;
+  const packs = receivedPacks({ line, choice });
+  const isReceived = (choice?.is_received ?? true) && packs.quantity + packs.freeQuantity > 0;
   const batchNumber = choice?.batch_number ?? `NEW-${Number(order.purchase_order_number)}`;
   const expiryMonth =
     choice?.expiry_month === undefined
@@ -356,17 +385,45 @@ async function receiveOrderLine(options: {
       : `${choice.expiry_month}-01`;
   const mrp = choice?.mrp === undefined ? line.mrp : (choice.mrp?.toFixed(2) ?? null);
   const batchId = isReceived
-    ? await receiveLine({ order, line, batchNumber, expiryMonth, mrp, context })
+    ? await receiveLine({
+        order,
+        line,
+        batchNumber,
+        expiryMonth,
+        mrp,
+        packs: packs.quantity + packs.freeQuantity,
+        context,
+      })
+    : null;
+  const money = isReceived
+    ? purchaseLineMoney({
+        quantity: packs.quantity,
+        rate: Number(line.rate),
+        gstPercent: line.gst_percent,
+        isGstInclusive: line.is_gst_inclusive,
+      })
     : null;
   await repository.markItemReceived({
     id: line.id,
     isReceived,
+    received:
+      money === null
+        ? null
+        : {
+            quantity: packs.quantity,
+            freeQuantity: packs.freeQuantity,
+            money: {
+              amount: money.amount,
+              taxable_amount: money.taxable_amount,
+              gst_amount: money.gst_amount,
+            },
+          },
     batchNumber: isReceived ? batchNumber : null,
     expiryMonth: isReceived ? expiryMonth : null,
     mrp,
     medicineBatchId: batchId,
   });
-  return isReceived ? line : null;
+  return money;
 }
 
 /**
@@ -517,6 +574,7 @@ async function decorateOrders(options: {
       expiry_month: item.expiry_month?.slice(0, 7) ?? null,
     }));
     output.item_count = own.length;
+    output.short_line_count = own.filter((item) => item.is_short === true).length;
     output.free_count = own.reduce((total, item) => total + item.free_quantity, 0);
     const supplier = output.supplier as { id: string };
     const summary = suppliersById.get(supplier.id);
