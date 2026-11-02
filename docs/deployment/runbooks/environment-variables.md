@@ -355,7 +355,10 @@ captcha off or on a Cloudflare test secret, and the committed CI JWT keypair. Th
 the marker — CI runs it with `TEST_MODE` for clinozy-fe's e2e — and neither does any env file; local
 machines and CI runners (restore drills, k6) keep these switches. A hosted `.env.development`
 scaffolded from `.env.example` must drop the dev values it copied (`RATE_LIMIT_RELAXED_CAPS=true`,
-the token echo, the cooldown switch).
+the token echo, the cooldown switch). A refused variable stops the deploy at "Prepare the database"
+before it reaches the database, and the step says which: an `Environment refused` error lists the
+variable names (never their values). An environment secret or variable overrides a repository one
+of the same name, so correct it in the GitHub Environment itself.
 
 **Verify before deploy:** `NODE_ENV=production pnpm dev` with `.env.production`
 filled — boot fails loudly on any violation. The deploy workflow's `validate:github-env-runtime`

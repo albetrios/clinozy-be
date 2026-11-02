@@ -529,12 +529,20 @@ jobs:
         # Actions logs are public (H-13): the step's stderr stays on the runner, and a failure names
         # only the step that failed (create, migrate, seed minimal). Its stdout is the applied
         # migrations' names and the seed counts.
+        # One thing from stderr is printed: when the env check (`env.config.ts`, at import, before any
+        # connection) refuses the environment, the NAMES of the refused variables. That message lists
+        # schema keys only, and the sed keeps only [A-Z0-9_, ] after it, so no value can come along.
+        # Without it a refused variable read like a database failure (#188: 0.5 s, no migration ran).
         env:
           METRICS_ENABLED: 'false'
         run: |
           set -euo pipefail
           if ! pnpm --silent db:seed 2> "$RUNNER_TEMP/db-seed.stderr"; then
             failed_step="$(sed -n 's/^✗ \([a-z ]*\):.*/\1/p' "$RUNNER_TEMP/db-seed.stderr" | head -n 1)"
+            refused_keys="$(sed -n 's/^.*Missing or invalid environment variables: \([A-Z][A-Z0-9_, ]*\).*$/\1/p' "$RUNNER_TEMP/db-seed.stderr" | head -n 1)"
+            if [ -n "$refused_keys" ]; then
+              echo "::error title=Environment refused::the ${failed_step:-database} step stopped at the environment check, before it reached the database. Refused (names only): ${refused_keys}. Correct them in this GitHub Environment; docs/deployment/runbooks/environment-variables.md lists what a hosted deploy refuses."
+            fi
             echo "::error title=Database preparation failed::the ${failed_step:-database} step failed. Its database message is withheld from this public log (it can quote a stored value); reproduce with pnpm db:seed against the environment's database from a trusted machine."
             exit 1
           fi
