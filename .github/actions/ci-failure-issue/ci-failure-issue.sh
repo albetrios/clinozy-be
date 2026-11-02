@@ -31,7 +31,8 @@ case "${MODE}" in
       echo "Commented on existing ci-failure issue #${existing}."
     else
       IFS=',' read -ra extra_labels <<< "${LABELS:-}"
-      for label in "${extra_labels[@]}"; do
+      # The `+` form: bash 3.2 (macOS) treats an empty array as unbound under `set -u`.
+      for label in ${extra_labels[@]+"${extra_labels[@]}"}; do
         gh label create "${label}" --repo "${GH_REPOSITORY}" 2>/dev/null || true
       done
       gh issue create --repo "${GH_REPOSITORY}" --title "${TITLE}" \
