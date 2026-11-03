@@ -1,4 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -128,6 +130,58 @@ describe('restore drill automation policy', () => {
     expect(run).not.toMatch(/\bcat\b|db-seed\.stderr"?\s*$|>&2/m);
     expect(run).not.toMatch(/--verbose|--debug|set -x/);
     expect(run).toContain('::error title=Database preparation failed::');
+    expect(run).toContain('::error title=Environment refused::');
+  });
+
+  // The one thing the step takes from stderr: the names the env check refused. Run the step's own
+  // extraction line against what Node prints, so a value can never ride along with a name.
+  it('names a refused environment variable, never its value (H-13)', () => {
+    const workflow = readFileSync(
+      join(ROOT, '.github/workflows/reusable-railway-deploy.yml'),
+      'utf8',
+    );
+    const extraction = /^\s*(refused_keys="\$\(sed .*\)")$/m.exec(workflow)?.[1];
+    expect(extraction).toBeDefined();
+    const refusedKeysFrom = (stderr: string): string => {
+      const runnerTemp = mkdtempSync(join(tmpdir(), 'db-seed-stderr-'));
+      try {
+        writeFileSync(join(runnerTemp, 'db-seed.stderr'), stderr);
+        const result = spawnSync(
+          'bash',
+          ['-e', '-c', `${extraction}; printf '%s' "$refused_keys"`],
+          {
+            env: { PATH: process.env.PATH, RUNNER_TEMP: runnerTemp },
+            encoding: 'utf8',
+          },
+        );
+        expect(result.status).toBe(0);
+        return result.stdout;
+      } finally {
+        rmSync(runnerTemp, { recursive: true, force: true });
+      }
+    };
+
+    // What Node prints when env.config.ts throws at import: the source line (no names), then the error.
+    const refused = [
+      '/app/src/shared/config/env.config.ts:26',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Node prints the source line, placeholder and all
+      '    throw new Error(`Missing or invalid environment variables: ${missingOrInvalid}`);',
+      '          ^',
+      '',
+      'Error: Missing or invalid environment variables: CAPTCHA_SECRET, TEST_MODE',
+      '    at getEnv (/app/src/shared/config/env.config.ts:26:11)',
+      '✗ migrate: migrations failed (exit 1)',
+    ].join('\n');
+    expect(refusedKeysFrom(refused)).toBe('CAPTCHA_SECRET, TEST_MODE');
+
+    // A Postgres message that quotes a stored value prints nothing.
+    expect(
+      refusedKeysFrom('error: invalid input syntax for type integer: "patient note 42"\n'),
+    ).toBe('');
+    // Nor does anything after the phrase that is not a schema key.
+    expect(
+      refusedKeysFrom('Error: Missing or invalid environment variables: a stored value\n'),
+    ).toBe('');
   });
 
   describe('runs end to end on a public repository without leaking production', () => {
