@@ -60,6 +60,9 @@ overrides:
   # uuid <14.0.0 — GHSA-w5hq-g745-h8pq / GHSA-qmq6-f8pr-cx5x (buffer bounds in v3/v5/v6).
   # postman-collection pins 8.3.2; confined to it.
   'postman-collection>uuid': '^14.0.1'
+  # re2js <2.8.7 — GHSA-gg6h-894w-4m9c (high, quadratic-time lookbehind DoS). Dev tree only:
+  # markdownlint (via markdownlint-cli2) pins 2.8.6; confined to it, on the 2.8 patch line.
+  'markdownlint>re2js': '~2.8.7'
   # smol-toml <1.9.0 — GHSA-r4xh-jqrq-34v2 (moderate, quadratic parse) and the older DoS fixes.
   # markdownlint-cli2 pins 1.8.0.
   'smol-toml@<1.9.0': '^1.9.0'
