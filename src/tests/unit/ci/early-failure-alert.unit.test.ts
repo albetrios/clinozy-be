@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   ALERT_CONTEXT,
+  alertIsRed,
   alertStatus,
+  clearedStatus,
   findFailedLane,
   lanesFinished,
   type RunJob,
@@ -14,6 +16,20 @@ const alertJob = prCi.slice(
   prCi.indexOf('\n  early-failure-alert:'),
   prCi.indexOf('\n  quality-gate:'),
 );
+/** quality-gate is the last job in pr-ci.yml, so it runs to the end of the file. */
+const gateJob = prCi.slice(prCi.indexOf('\n  quality-gate:'));
+
+/** The folders a job's sparse checkout names (`<folder>`, or `|` and one folder per line). */
+function sparseCheckoutFolders(jobText: string): string[] {
+  const lines = jobText.split('\n');
+  const key = lines.findIndex((line) => line.trimStart().startsWith('sparse-checkout:'));
+  const keyLine = lines[key] ?? '';
+  const depth = (line: string) => line.length - line.trimStart().length;
+  const value = keyLine.slice(keyLine.indexOf(':') + 1).trim();
+  const block = lines.slice(key + 1);
+  const blockEnd = block.findIndex((line) => depth(line) <= depth(keyLine));
+  return value === '|' ? block.slice(0, blockEnd).map((line) => line.trim()) : [value];
+}
 
 /** `entry` and every local module it loads, following relative imports. */
 function localModules(entry: string): string[] {
@@ -76,20 +92,42 @@ describe('PR CI early failure alert', () => {
     expect(gate.slice(0, gate.indexOf('if: always()'))).not.toContain('- early-failure-alert');
   });
 
-  it('checks out every local module the watcher imports (the job is a sparse checkout)', () => {
-    const lines = alertJob.split('\n');
-    const key = lines.findIndex((line) => line.trimStart().startsWith('sparse-checkout:'));
-    const keyLine = lines[key] ?? '';
-    const depth = (line: string) => line.length - line.trimStart().length;
-    const value = keyLine.slice(keyLine.indexOf(':') + 1).trim();
-    // `sparse-checkout: <folder>`, or `sparse-checkout: |` and one folder per deeper line.
-    const block = lines.slice(key + 1);
-    const blockEnd = block.findIndex((line) => depth(line) <= depth(keyLine));
-    const folders = value === '|' ? block.slice(0, blockEnd).map((line) => line.trim()) : [value];
+  it.each([
+    ['the watcher', alertJob],
+    ['the Quality gate', gateJob],
+  ])('checks out every local module the script imports in %s (a sparse checkout)', (_, jobText) => {
+    const folders = sparseCheckoutFolders(jobText);
     const missing = localModules('tooling/ci/early-failure-alert.mjs').filter(
       (file) => !folders.some((folder) => file.startsWith(`${folder}/`)),
     );
     expect(folders.length).toBeGreaterThan(0);
     expect(missing).toEqual([]);
+  });
+
+  it('sees a red alert only in the alert context, by its latest state', () => {
+    expect(alertIsRed([{ context: ALERT_CONTEXT, state: 'failure' }])).toBe(true);
+    expect(alertIsRed([{ context: ALERT_CONTEXT, state: 'success' }])).toBe(false);
+    expect(alertIsRed([{ context: 'Quality gate', state: 'failure' }])).toBe(false);
+    expect(alertIsRed([])).toBe(false);
+  });
+
+  it('clears a stale alert with a green status that names the attempt and links the run', () => {
+    const runUrl = 'https://github.com/example/actions/runs/7';
+    expect(clearedStatus({ runAttempt: '2', runUrl })).toEqual({
+      state: 'success',
+      context: ALERT_CONTEXT,
+      description: 'Cleared: every lane passed on run attempt 2',
+      target_url: runUrl,
+    });
+  });
+
+  it('clears from the Quality gate, only after the aggregate step passed', () => {
+    expect(gateJob).toContain('statuses: write');
+    const aggregate = gateJob.indexOf('- name: Aggregate required-lane results');
+    const clear = gateJob.indexOf('run: node tooling/ci/early-failure-alert.mjs --clear');
+    expect(aggregate).toBeGreaterThan(-1);
+    expect(clear).toBeGreaterThan(aggregate);
+    // A step with no `if:` runs only when every step before it succeeded.
+    expect(gateJob.slice(aggregate, clear)).not.toMatch(/^ {8}if:/m);
   });
 });

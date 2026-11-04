@@ -978,6 +978,9 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: write
     steps:
       - name: Aggregate required-lane results
         env:
@@ -1001,3 +1004,17 @@ jobs:
             exit 1
           fi
           echo "Quality gate PASSED — all required lanes succeeded or were skipped."
+      # Every lane passed. A red `Early failure alert` left on the head commit by an earlier
+      # attempt (re-running failed jobs never re-runs the watcher) is now stale: turn it green.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          # tooling/setup/common holds script.ts, the command-line helper the alert imports.
+          sparse-checkout: |
+            tooling/ci
+            tooling/setup/common
+      - name: Clear a stale early failure alert
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node tooling/ci/early-failure-alert.mjs --clear
