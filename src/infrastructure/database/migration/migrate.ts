@@ -289,7 +289,8 @@ async function main() {
 
       if (transactional) {
         // Bounded lock waits (a blocked DDL must not queue the app's traffic behind it) and a
-        // statement cap; a file whose lock wait times out rolls back and is retried.
+        // statement cap; a file whose lock wait times out, or that deadlocks with the app's
+        // traffic, rolls back and is retried.
         await retryOnMigrationLockTimeout({
           filename,
           run: () =>

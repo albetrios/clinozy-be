@@ -72,10 +72,17 @@ on the table queues behind it — an outage for as long as the wait. The runner
 ([`migration-lock-timeout.ts`](../../../src/infrastructure/database/migration/migration-lock-timeout.ts))
 therefore bounds every migration:
 
-| Lane | `lock_timeout` | `statement_timeout` | On a lock timeout (SQLSTATE 55P03) |
+| Lane | `lock_timeout` | `statement_timeout` | On a lock timeout (SQLSTATE 55P03) or a deadlock (40P01) |
 | ---- | -------------- | ------------------- | ---------------------------------- |
 | Transactional (default) | 5 s (`SET LOCAL`) | 5 min (`SET LOCAL`) | the file rolls back and is retried, 3 attempts in all, 3 s apart |
 | Non-transactional (`CREATE INDEX CONCURRENTLY`) | 5 s (session) | none — long index builds block no writes | the run fails; drop the INVALID index and re-run |
+
+A file that locks several tables in turn can deadlock with a request that holds one of them and
+wants another: Postgres aborts one side (SQLSTATE 40P01), and when that side is the migration, its
+transaction has rolled back and the runner retries the file like a lock timeout. Take a file's locks
+in the order the application touches the tables (a record before the uploads it reads, an order
+before its lines) so the request, not the migration, rarely has to wait — the retry covers the paths
+that go the other way.
 
 A migration that genuinely needs longer than 5 minutes inside its transaction is a backfill too big
 for one transaction or a table rewrite the lint should have caught — split it, or move the long part to
@@ -137,15 +144,16 @@ Four migrations of the release after v9.4.1 refuse writes v9.4.1 still makes, an
 writes without the upload binding the new release reads. v9.4.1 keeps writing while the migrations apply
 and the containers swap, and again after a rollback, so
 [`20261104043911_previous_release_write_compatibility.sql`](../../../migrations/20261104043911_previous_release_write_compatibility.sql)
-completes each such write in the new shape. Every trigger fires only on a shape the new release never
-writes; a raw write that breaks a rule on purpose is still refused.
+completes each such write in the new shape. The data triggers act only on a shape the new release
+never writes, so a raw write that breaks a rule on purpose is still refused; the binding triggers fire
+on every write that carries keys and repeat what the new release's own bind does next — a no-op for it.
 
 | Trigger (`app.`) | Fills | For the constraint of |
 | ---------------- | ----- | --------------------- |
 | `trg_<record>_bind_upload_keys_for_previous_release` on `patient_images`, `patient_reports`, `patient_reviews`, `contact_activities`, `payments` | binds the record's confirmed, unbound keys to it | `20261101090000_upload_record_binding` (read links) |
 | `trg_leads_closed_at_for_previous_release` | `closed_at` on a status change into / out of a closing status | `chk_leads_closed_at` |
 | `trg_medical_purchase_order_items_fill_for_previous_release` | a new line's GST (its medicine's rate, inclusive) and its order's split; received = ordered on a line marked received | `NOT NULL` GST columns, `chk_medical_purchase_order_items_amount`, `chk_medical_purchase_order_items_received` |
-| `trg_medical_purchase_orders_split_for_previous_release` | `taxable_total` / `gst_total` when only `total` was written | `chk_medical_purchase_orders_totals` |
+| `trg_medical_purchase_orders_split_for_previous_release` | `taxable_total` / `gst_total` when only `total` was written, or a receive kept the total and the split | `chk_medical_purchase_orders_totals` |
 | `trg_contacts_date_of_birth_for_previous_release` | `date_of_birth_is_approximate = false` when the date is cleared | `chk_contacts_date_of_birth_approximate` |
 
 Tests: `src/domains/app/__tests__/integration/app-previous-release-writes.integration.test.ts` (each

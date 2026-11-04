@@ -5,6 +5,8 @@ import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { operatorQuery, withOperatorTransaction } from '@/tests/helpers/operator-database.js';
+import { executeAsClinozyBeAppTenant } from '@/tests/helpers/rls-matrix.helper.js';
+import { sql } from 'drizzle-orm';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runGlobalRetentionWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { runAppRecordPurgeJob } from '@/domains/app/workers/app-record-purge.processor.js';
@@ -345,5 +347,16 @@ describe('Upload binding — integration (C-2, G2-5)', () => {
       FROM app.patient_reports AS report WHERE report.public_id = ${panel}
     `;
     expect(await boundTo(inserted)).toBe(`patient_report:${copy}`);
+
+    // The same PATCH as the production role, in the organization's context: the trigger's UPDATE of
+    // upload.uploads passes its RLS policy
+    const asApp = await confirmedUpload('old-app-as-role.pdf');
+    await executeAsClinozyBeAppTenant(fixture.organization.publicId, (transaction) =>
+      transaction.execute(
+        sql`UPDATE app.patient_reports SET file_keys = ARRAY[${asApp}]::text[]
+          WHERE organization_id = ${fixture.organization.id} AND public_id = ${panel}`,
+      ),
+    );
+    expect(await boundTo(asApp)).toBe(`patient_report:${panel}`);
   });
 });

@@ -3,6 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { operatorQuery } from '@/tests/helpers/operator-database.js';
+import { executeAsClinozyBeAppTenant } from '@/tests/helpers/rls-matrix.helper.js';
+import { sql } from 'drizzle-orm';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import {
   type AppFixture,
@@ -216,6 +218,102 @@ describe('Previous-release writes — integration (expand phase)', () => {
       WHERE id = ${order.id}
     `;
     expect(await split(order.id), 'only the received line counts').toBe('1120.00,1000.00,120.00');
+  });
+
+  it('purchase order: a receive that keeps the ordered total still re-splits over the received lines', async () => {
+    const order = await previousReleaseOrder();
+    // v9.4.1's receive: goods not ordered go in first — 3 × ₹200 of the 12 % medicine, the same
+    // amount as the cream line left unticked, so the total stays ₹1720
+    await operatorQuery`
+      INSERT INTO app.medical_purchase_order_items
+        (public_id, organization_id, medical_purchase_order_id, line_number, medicine_id, quantity,
+         free_quantity, rate, amount)
+      VALUES (${generatePublicId('medicalPurchaseOrderItem')}, ${fixture.organization.id}, ${order.id},
+        3, ${strips.id}, 3, 0, 200.00, 600.00)
+    `;
+    await previousReleaseReceive({
+      orderId: order.id,
+      lineNumber: 1,
+      isReceived: true,
+      batchId: strips.batch,
+    });
+    await previousReleaseReceive({
+      orderId: order.id,
+      lineNumber: 2,
+      isReceived: false,
+      batchId: null,
+    });
+    await previousReleaseReceive({
+      orderId: order.id,
+      lineNumber: 3,
+      isReceived: true,
+      batchId: strips.batch,
+    });
+    await operatorQuery`
+      UPDATE app.medical_purchase_orders SET stage = 'received', received_at = now(), total = 1720.00
+      WHERE id = ${order.id}
+    `;
+    expect(await split(order.id), '(1000 + 535.71) taxable, (120 + 64.29) GST').toBe(
+      '1720.00,1535.71,184.29',
+    );
+  });
+
+  it('as the production role, in the organization’s context: the triggers read and write under RLS', async () => {
+    await flow.expect(200, 'an open lead', 'POST', '/app/leads', {
+      contact: {
+        first_name: 'Rita',
+        last_name: T,
+        phones: [{ phone: `+917${digits}73`, is_primary: true }],
+      },
+    });
+    const lead = flow.last('.data.id');
+    await flow.expect(200, 'a contact registered by age', 'POST', '/app/contacts', {
+      first_name: 'Role',
+      last_name: T,
+      phones: [{ phone: `+916${digits}74`, is_primary: true }],
+      age: 30,
+    });
+    const contact = flow.last('.data.id');
+    const orderPublicId = generatePublicId('medicalPurchaseOrder');
+
+    await executeAsClinozyBeAppTenant(fixture.organization.publicId, async (transaction) => {
+      await transaction.execute(sql`
+        INSERT INTO app.medical_purchase_orders (public_id, organization_id, supplier_id, order_date, total)
+        VALUES (${orderPublicId}, ${fixture.organization.id}, ${supplierId}, current_date, 1120.00)
+      `);
+      await transaction.execute(sql`
+        INSERT INTO app.medical_purchase_order_items
+          (public_id, organization_id, medical_purchase_order_id, line_number, medicine_id, quantity,
+           free_quantity, rate, amount)
+        SELECT ${generatePublicId('medicalPurchaseOrderItem')}, ${fixture.organization.id}, id, 1,
+          ${strips.id}, 10, 0, 112.00, 1120.00
+        FROM app.medical_purchase_orders
+        WHERE organization_id = ${fixture.organization.id} AND public_id = ${orderPublicId}
+      `);
+      await transaction.execute(
+        sql`UPDATE app.leads SET status = 'lost'
+          WHERE organization_id = ${fixture.organization.id} AND public_id = ${lead}`,
+      );
+      await transaction.execute(
+        sql`UPDATE app.contacts SET date_of_birth = NULL
+          WHERE organization_id = ${fixture.organization.id} AND public_id = ${contact}`,
+      );
+    });
+
+    const [order] = await operatorQuery<{ id: number }[]>`
+      SELECT id::int AS id FROM app.medical_purchase_orders WHERE public_id = ${orderPublicId}
+    `;
+    expect(await split(order?.id ?? 0), 'the medicine read and the order split under RLS').toBe(
+      '1120.00,1000.00,120.00',
+    );
+    const [closed] = await operatorQuery<{ closed: boolean }[]>`
+      SELECT closed_at IS NOT NULL AS closed FROM app.leads WHERE public_id = ${lead}
+    `;
+    expect(closed?.closed).toBe(true);
+    const [cleared] = await operatorQuery<{ approximate: boolean }[]>`
+      SELECT date_of_birth_is_approximate AS approximate FROM app.contacts WHERE public_id = ${contact}
+    `;
+    expect(cleared?.approximate).toBe(false);
   });
 
   it('purchase order: a write that breaks the rules on purpose is still refused', async () => {

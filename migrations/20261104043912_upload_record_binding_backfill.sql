@@ -27,18 +27,24 @@
 -- The six tables are FORCE RLS and the migrator is RLS-subject: the UPDATE runs between NO FORCE and
 -- FORCE (the leads_closed_at pattern), one transaction, ACCESS EXCLUSIVE on the six tables until commit:
 -- one hash join of the five record tables' keys with upload.uploads, a sequential pass over each.
+-- Locks are taken in the order a read of a record takes them — the record tables, then the uploads it
+-- signs links from — so a list request waits instead of deadlocking. A write that reads the uploads
+-- first can still meet the file in the other order; Postgres then aborts one side, and when it is
+-- the migration, the runner retries the file (SQLSTATE 40P01, migration-lock-timeout.ts).
+-- Duration: 0.07 s on the local bulk data set; review measured about 8.4 s with 300 k uploads and
+-- 150 k reports — those six tables wait that long, so deploy off-peak.
 
-ALTER TABLE upload.uploads NO FORCE ROW LEVEL SECURITY;
---> statement-breakpoint
 ALTER TABLE app.patient_images NO FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE app.patient_reports NO FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE app.patient_reviews NO FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
+ALTER TABLE app.payments NO FORCE ROW LEVEL SECURITY;
+--> statement-breakpoint
 ALTER TABLE app.contact_activities NO FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
-ALTER TABLE app.payments NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE upload.uploads NO FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 
 WITH record_keys AS (
@@ -79,14 +85,14 @@ WHERE upload_row.organization_id = owner_of_key.organization_id
   AND upload_row.bound_public_id IS NULL;
 --> statement-breakpoint
 
-ALTER TABLE upload.uploads FORCE ROW LEVEL SECURITY;
---> statement-breakpoint
 ALTER TABLE app.patient_images FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE app.patient_reports FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE app.patient_reviews FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
+ALTER TABLE app.payments FORCE ROW LEVEL SECURITY;
+--> statement-breakpoint
 ALTER TABLE app.contact_activities FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
-ALTER TABLE app.payments FORCE ROW LEVEL SECURITY;
+ALTER TABLE upload.uploads FORCE ROW LEVEL SECURITY;

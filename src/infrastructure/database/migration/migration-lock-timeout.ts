@@ -9,13 +9,13 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 export const MIGRATION_LOCK_TIMEOUT_MS = 5_000;
 
 /**
- * Longest one statement of a transactional migration may run once it holds its locks.
- * Migrations carry no data backfills, so DDL running longer is a runaway — a table rewrite the
- * lint missed — sitting on an exclusive lock.
+ * Longest one statement of a transactional migration may run once it holds its locks. A backfill
+ * that needs longer is too big for one transaction (split it), and DDL running longer is a
+ * runaway — a table rewrite the lint missed — sitting on an exclusive lock.
  */
 export const MIGRATION_STATEMENT_TIMEOUT_MS = 300_000;
 
-/** Attempts per transactional migration file when its lock wait times out. */
+/** Attempts per transactional migration file when its lock wait times out or it deadlocks. */
 export const MIGRATION_LOCK_TIMEOUT_ATTEMPTS = 3;
 
 /** Pause between those attempts, letting the transaction that holds the lock finish. */
@@ -25,6 +25,17 @@ export const MIGRATION_LOCK_TIMEOUT_RETRY_DELAY_MS = 3_000;
 export function isMigrationLockTimeoutError(error: unknown): boolean {
   return (
     typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '55P03'
+  );
+}
+
+/**
+ * Whether `error` is Postgres SQLSTATE 40P01 `deadlock_detected` — the migration's file took a lock
+ * the application's traffic needed while it waited for one that traffic held, and Postgres chose
+ * the migration as the victim.
+ */
+export function isMigrationDeadlockError(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '40P01'
   );
 }
 
@@ -64,16 +75,19 @@ export async function applyMigrationTimeouts(options: {
 }
 
 /**
- * Runs one transactional migration file, retrying it when its lock wait times out.
+ * Runs one transactional migration file, retrying it when its lock wait times out or it deadlocks
+ * with the application's traffic.
  *
  * @remarks
- * - **Algorithm:** calls `run` (which opens the file's transaction); on SQLSTATE 55P03 the
- *   transaction has already rolled back, so the whole file is safe to run again after `delayMs`,
- *   up to `attempts` times in all.
- * - **Failure modes:** any other error is rethrown at once; the last lock timeout is rethrown
- *   after the final attempt, failing the migration run (and with it the deploy) without having
- *   held traffic behind a lock.
- * - **Side effects:** one warn log per retried attempt (`migration.lock_timeout.retry`).
+ * - **Algorithm:** calls `run` (which opens the file's transaction); on SQLSTATE 55P03 (lock
+ *   timeout) or 40P01 (deadlock — a file that takes several tables' locks in turn can meet a
+ *   request that holds one and wants another) the transaction has already rolled back, so the
+ *   whole file is safe to run again after `delayMs`, up to `attempts` times in all.
+ * - **Failure modes:** any other error is rethrown at once; the last lock timeout or deadlock is
+ *   rethrown after the final attempt, failing the migration run (and with it the deploy) without
+ *   having held traffic behind a lock.
+ * - **Side effects:** one warn log per retried attempt (`migration.lock_timeout.retry`, with its
+ *   `reason`).
  * - **Notes:** never wrap the non-transactional lane in this — a failed `CREATE INDEX
  *   CONCURRENTLY` leaves an INVALID index that an operator drops before re-running.
  */
@@ -89,9 +103,16 @@ export async function retryOnMigrationLockTimeout<T>(options: {
     try {
       return await options.run();
     } catch (error) {
-      if (!isMigrationLockTimeoutError(error) || attempt >= attempts) throw error;
+      const deadlock = isMigrationDeadlockError(error);
+      if (!(deadlock || isMigrationLockTimeoutError(error)) || attempt >= attempts) throw error;
       logger.warn(
-        { filename: options.filename, attempt, attempts, delayMs },
+        {
+          filename: options.filename,
+          attempt,
+          attempts,
+          delayMs,
+          reason: deadlock ? 'deadlock' : 'lock_timeout',
+        },
         'migration.lock_timeout.retry',
       );
       await new Promise((resolve) => setTimeout(resolve, delayMs));
