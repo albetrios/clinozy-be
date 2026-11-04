@@ -4,6 +4,7 @@ import {
   buildThumbnailObjectKey,
   configureImageThumbnailDecoder,
   createImageThumbnail,
+  UPLOAD_THUMBNAIL_MAX_DECODED_BYTES,
   UPLOAD_THUMBNAIL_MAX_DIMENSION,
   UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS,
   UploadThumbnailSourceError,
@@ -85,13 +86,24 @@ describe('createImageThumbnail', () => {
     expect(((refusal as Error).cause as Error).message).toMatch(/exceeds pixel limit/);
   });
 
-  it('lets a large photo inside the cap through to the decoder (a 48 MP phone shot, 8064 × 6048)', async () => {
-    expect(8064 * 6048).toBeLessThan(UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS);
+  it('refuses an image under the pixel cap that would decode past the budget (16-bit), before decoding it', async () => {
+    // 7999 × 8000 × 3 samples × 2 bytes = 384 MB decoded (review: 645 MiB RSS in the worker)
+    expect(7999 * 8000).toBeLessThan(UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS);
+    expect(7999 * 8000 * 3 * 2).toBeGreaterThan(UPLOAD_THUMBNAIL_MAX_DECODED_BYTES);
     const refusal = await createImageThumbnail(
-      oversizedPngHeader({ width: 8064, height: 6048 }),
+      oversizedPngHeader({ width: 7999, height: 8000, bitDepth: 16 }),
     ).catch((error: unknown) => error);
-    // Its header passes the cap, so the decoder reads on and finds the image data empty
-    expect(((refusal as Error).cause as Error).message).not.toMatch(/exceeds pixel limit/);
+    expect(refusal).toBeInstanceOf(UploadThumbnailSourceError);
+    expect(((refusal as Error).cause as Error).message).toMatch(/over the 192000000-byte budget/);
+  });
+
+  it('lets an 8-bit photo at the pixel cap through to the decoder (8000 × 8000 × 3 = the budget)', async () => {
+    expect(8000 * 8000 * 3).toBe(UPLOAD_THUMBNAIL_MAX_DECODED_BYTES);
+    const refusal = await createImageThumbnail(
+      oversizedPngHeader({ width: 8000, height: 8000 }),
+    ).catch((error: unknown) => error);
+    // Its header passes both caps, so the decoder reads on and finds the image data empty
+    expect(((refusal as Error).cause as Error).message).not.toMatch(/pixel limit|budget/);
   });
 });
 

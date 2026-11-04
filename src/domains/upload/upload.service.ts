@@ -569,8 +569,9 @@ export class UploadService {
    *   database access — it runs between a worker's database contexts.
    * - **Failure modes:** answers `skipped` (never throws) for a key outside the organization's
    *   opted-in prefixes (`not_opted_in`), a stored file that is gone (`source_missing`), a type
-   *   the purpose does not opt in, or bytes the decoder refuses — corrupt, over the pixel cap or
-   *   past the time limit (`source_unusable`, warn-logged with the decoder's message); each is
+   *   the purpose does not opt in, or bytes the decoder refuses — corrupt, over the pixel or
+   *   decoded-size cap, or past the time limit (`source_unusable`, warn-logged with the decoder's
+   *   message); each is
    *   final for that file (`UPLOAD_THUMBNAIL_SKIP_REASON_VALUES`). Any other storage error
    *   propagates (the caller retries).
    * - **Side effects:** one GET and one PUT on the object store; overwrites an earlier thumbnail

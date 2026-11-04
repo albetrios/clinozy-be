@@ -13,8 +13,11 @@
 -- - `chk_patient_images_thumbnail_or_skip`: a photo holds a thumbnail or a reason, never both — the
 --   job clears the reason when a later run (a restore) makes the thumbnail.
 --
--- Each CHECK is added NOT VALID and validated after; the column is all NULL, so the scan passes at
--- once. The previous release never reads or writes the column. RLS is unchanged.
+-- Each CHECK is added NOT VALID, then validated in this same transaction: ADD CONSTRAINT's ACCESS
+-- EXCLUSIVE lock is still held, so app.patient_images waits through both validation scans — one full
+-- pass each (every new value is NULL, so none fails). On today's data that is milliseconds; a much
+-- larger table would move the VALIDATEs to a later migration. The previous release never reads or
+-- writes the column. RLS is unchanged.
 
 ALTER TABLE app.patient_images
   ADD COLUMN IF NOT EXISTS thumbnail_skip_reason VARCHAR(20) NULL;

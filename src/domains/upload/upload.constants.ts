@@ -152,8 +152,8 @@ export { PRESIGNED_URL_EXPIRY_SECONDS } from '@/shared/constants/ttl.constants.j
  * Why `UploadService.createThumbnail` made no thumbnail — each final for the stored file: a
  * key outside the opted-in prefixes (`not_opted_in`), a stored file that is gone (`source_missing`),
  * or bytes the decoder will not read — a type not opted in, a corrupt file, more pixels than
- * `UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS`, or a decode past `UPLOAD_THUMBNAIL_TIMEOUT_SECONDS`
- * (`source_unusable`).
+ * `UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS`, a decoded size over `UPLOAD_THUMBNAIL_MAX_DECODED_BYTES`, or
+ * a decode past `UPLOAD_THUMBNAIL_TIMEOUT_SECONDS` (`source_unusable`).
  *
  * @remarks
  * - **Notes:** a record that keeps a thumbnail stores the reason so its sweep stops asking again

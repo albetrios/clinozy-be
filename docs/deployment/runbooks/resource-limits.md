@@ -36,11 +36,14 @@ Container memory (Railway slider / Kubernetes `limits.memory`) is often expresse
 
 The worker process logs a warning when **RSS** exceeds **512 MiB** ([`src/infrastructure/queue/bootstrap.ts`](../../../src/infrastructure/queue/bootstrap.ts)). If the container limit is **below ~768 MiB**, every healthy worker may trip that threshold — tune the deployment (more memory), lower concurrency (`WORKER_CONCURRENCY`), or eventually adjust the threshold in code if intentional.
 
-The patient image thumbnail job is the worker's one image decoder: one photo at a time, at most
-64 MP (`UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS`, checked from the header) and 30 s per photo, with the
-libvips cache off and one libvips thread. The worst case, a PNG at the cap, decodes to about 256 MB
-on top of the worker's baseline (JPEGs shrink while they load and stay far smaller), so give the
-worker container at least 768 MiB.
+The patient image thumbnail job is the worker's one image decoder: one photo at a time, with the
+libvips cache off and one libvips thread. Before decoding, the header must show at most 64 MP
+(`UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS`) and at most 192 MB decoded (`UPLOAD_THUMBNAIL_MAX_DECODED_BYTES`,
+width × height × channels × bytes per sample), and the work stops at 30 s. The worst case it lets
+through, an 8000 × 8000 8-bit RGB interlaced PNG, peaked at 280 MiB RSS in a bare Node process of
+about 40 MiB, so a decode adds about 240 MiB to the worker; JPEGs shrink while they load and stay far
+smaller. Without the decoded-size cap a 570 KB 16-bit PNG under the pixel cap reached 645 MiB in
+the worker. Give the worker container at least 768 MiB.
 
 ### Postgres connection budget
 

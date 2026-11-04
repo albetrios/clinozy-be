@@ -44,7 +44,7 @@ export type PatientImageThumbnailOutcome =
  *   still holds the removed key). A photo restored while its thumbnail was being removed is left
  *   empty and live, and the job kept behind this one (the restore's) makes it again.
  * - **Failure modes:** a photo that is gone, already in step, outside the opted-in prefixes, or
- *   whose stored file is missing or unreadable (corrupt, over the pixel cap, past the time limit)
+ *   whose stored file is missing or unreadable (corrupt, over the pixel or decoded-size cap, past the time limit)
  *   is a skip (completed, warn log for the last three) — the photo keeps its full-size fallback,
  *   and for the last three the job records the reason (`thumbnail_skip_reason`, a compare-and-set)
  *   so the sweep stops re-queuing it; a later run that makes the thumbnail (a restore) clears it.

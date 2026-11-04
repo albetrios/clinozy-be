@@ -38,9 +38,10 @@ import { runPatientImageThumbnailReconcileJob } from './patient-image-thumbnail-
  * - **Side effects:** a BullMQ Redis connection; short Postgres checkouts per job, never held
  *   across the S3 call; image decoding in-process — one job at a time (concurrency 1), the decoder
  *   set up at start ({@link configureImageThumbnailDecoder}: no libvips cache, one thread). What
- *   one decode may hold is bounded by pixels, not by the file's bytes: a 15 MB PNG can claim
- *   gigapixels, so the source is refused past `UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS` (64 MP, about
- *   256 MB decoded) or `UPLOAD_THUMBNAIL_TIMEOUT_SECONDS` (30 s).
+ *   one decode may hold is bounded from the image's header, not by the file's bytes (a 570 KB
+ *   16-bit PNG decodes to 384 MB): a source over `UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS` (64 MP) or
+ *   `UPLOAD_THUMBNAIL_MAX_DECODED_BYTES` (192 MB decoded — about 240 MiB of RSS at worst) is refused
+ *   before decoding, and one still running at `UPLOAD_THUMBNAIL_TIMEOUT_SECONDS` (30 s) is stopped.
  * - **Notes:** pull-based; jobs come from a photo's create, delete or restore (after the commit),
  *   the sweep and the backfill (`pnpm ops:patient-image-thumbnails-backfill`).
  */
