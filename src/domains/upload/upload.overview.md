@@ -29,8 +29,11 @@ Malware Protection for S3 (downloads gated on a clean tag). Details: `docs/deplo
 - **An upload belongs to the record it was first attached to (C-2):** a record write binds its keys
   (`bound_resource`, `bound_public_id`) in one guarded `UPDATE` inside its own transaction, and refuses a
   key bound to another record (400 on its field). A record's read links are signed only for the record a
-  key is bound to. Rows written before the binding existed stay unbound and get no link. Bindable records
-  are `UPLOAD_BOUND_RECORD_TABLES` (`upload-bound-records.ts`).
+  key is bound to. Rows written before the binding existed were bound to the record holding their key
+  by `20261104043912_upload_record_binding_backfill.sql`; until its contract migration, a record the
+  previous release (v9.4.1) writes is bound by a trigger on the record's table
+  (`20261104043911_previous_release_write_compatibility.sql`). Bindable records are
+  `UPLOAD_BOUND_RECORD_TABLES` (`upload-bound-records.ts`).
 - **A purged record's files are tombstoned (G2-5):** the tombstone retention first soft-deletes the uploads
   whose bound record no longer exists (a join-only `NOT EXISTS` on that record's table), then deletes the
   objects of tombstoned rows as usual — so a file of a purged review goes at the next run.

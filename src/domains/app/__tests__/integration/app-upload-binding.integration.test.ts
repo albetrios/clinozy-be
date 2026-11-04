@@ -1,8 +1,11 @@
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { operatorQuery } from '@/tests/helpers/operator-database.js';
+import { operatorQuery, withOperatorTransaction } from '@/tests/helpers/operator-database.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runGlobalRetentionWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { runAppRecordPurgeJob } from '@/domains/app/workers/app-record-purge.processor.js';
 import { tombstoneUploadsOfMissingRecords } from '@/domains/upload/upload.repository.js';
@@ -45,6 +48,39 @@ describe('Upload binding — integration (C-2, G2-5)', () => {
       SELECT bound_resource AS resource, bound_public_id AS id FROM upload.uploads WHERE file_key = ${key}
     `;
     return row?.resource ? `${row.resource}:${row.id}` : 'none';
+  }
+
+  /** Clears the binding of `keys` — the state every upload v9.4.1 attached is in. */
+  async function unbind(...keys: string[]): Promise<void> {
+    await operatorQuery`
+      UPDATE upload.uploads SET bound_resource = NULL, bound_public_id = NULL WHERE file_key = ANY(${keys})
+    `;
+  }
+
+  /** Runs the binding backfill migration again, statement by statement in one transaction. */
+  async function runBindingBackfill(): Promise<void> {
+    const contents = await readFile(
+      resolve(process.cwd(), 'migrations/20261104043912_upload_record_binding_backfill.sql'),
+      'utf8',
+    );
+    const statements = contents
+      .split(/\n--> statement-breakpoint\s*\n?/g)
+      .map((statement) => statement.trim())
+      .filter((statement) => statement.length > 0);
+    await withOperatorTransaction(async (transaction) => {
+      for (const statement of statements) await transaction.unsafe(statement);
+    });
+  }
+
+  /** A report on the fixture patient holding `fileKeys`; answers its id. */
+  async function report(name: string, fileKeys: string[]): Promise<string> {
+    await flow.expect(200, `report ${name}`, 'POST', `/app/patients/${patient}/reports`, {
+      name,
+      type: 'lab',
+      report_date: calendarDay(fixture, 0),
+      file_keys: fileKeys,
+    });
+    return flow.last('.data.id');
   }
 
   beforeAll(async () => {
@@ -230,5 +266,84 @@ describe('Upload binding — integration (C-2, G2-5)', () => {
     `;
     expect(keptRow?.tombstoned, 'a live review keeps its file').toBe(false);
     expect(await boundTo(kept)).toBe(`patient_review:${reviewKept}`);
+  });
+
+  it('backfill: a file attached before the binding existed gets its link back; a loose file stays unbound', async () => {
+    const reports = `/app/patients/${patient}/reports`;
+    const attached = await confirmedUpload('before-binding.pdf');
+    const loose = await confirmedUpload('never-attached.pdf');
+    const scan = await report('Old scan', [attached]);
+    await unbind(attached, loose);
+    await flow.expect(200, 'the pre-release report', 'GET', `${reports}/${scan}`);
+    flow.expectValue('unbound: no link (the release blocker)', '.data.files[0].file_url', 'null');
+
+    await runBindingBackfill();
+    expect(await boundTo(attached)).toBe(`patient_report:${scan}`);
+    expect(await boundTo(loose), 'no record holds it').toBe('none');
+    await flow.expect(200, 'the report after the backfill', 'GET', `${reports}/${scan}`);
+    flow.expectValue('it has its link again', '.data.files[0].file_url != null', 'true');
+    flow.expectValue('and its name', '.data.files[0].file_name', 'before-binding.pdf');
+
+    await runBindingBackfill();
+    expect(await boundTo(attached), 'a re-run changes nothing').toBe(`patient_report:${scan}`);
+  });
+
+  it('backfill: a key a deleted and a live record both hold binds to the live one; a bound key stays put', async () => {
+    const reports = `/app/patients/${patient}/reports`;
+    const shared = await confirmedUpload('shared.pdf');
+    const elsewhere = await confirmedUpload('bound-elsewhere.pdf');
+    const deleted = await report('Deleted first', [shared]);
+    const live = await report('Live second', []);
+    await operatorQuery`UPDATE app.patient_reports SET file_keys = ARRAY[${shared}, ${elsewhere}] WHERE public_id = ${live}`;
+    await flow.expect(
+      204,
+      'the first report is deleted',
+      'DELETE',
+      `${reports}/${deleted}?reason=mistake`,
+    );
+    await unbind(shared);
+    await operatorQuery`UPDATE upload.uploads SET bound_resource = 'payment', bound_public_id = 'pay_elsewhere0000000000000' WHERE file_key = ${elsewhere}`;
+
+    await runBindingBackfill();
+    expect(await boundTo(shared), 'the live report wins over the deleted one').toBe(
+      `patient_report:${live}`,
+    );
+    expect(await boundTo(elsewhere), 'an existing binding is never moved').toBe(
+      'payment:pay_elsewhere0000000000000',
+    );
+  });
+
+  it('previous release: a record it writes binds its files on the write (expand trigger)', async () => {
+    const reports = `/app/patients/${patient}/reports`;
+    const updated = await confirmedUpload('old-app-update.pdf');
+    const inserted = await confirmedUpload('old-app-insert.pdf');
+    const taken = await confirmedUpload('old-app-taken.pdf');
+    const owner = await report('Owner', [taken]);
+    const panel = await report('Old app panel', []);
+
+    // v9.4.1's PATCH writes file_keys and binds nothing
+    await operatorQuery`UPDATE app.patient_reports SET file_keys = ARRAY[${updated}, ${taken}] WHERE public_id = ${panel}`;
+    expect(await boundTo(updated)).toBe(`patient_report:${panel}`);
+    expect(await boundTo(taken), 'a key bound to another record is left alone').toBe(
+      `patient_report:${owner}`,
+    );
+    await flow.expect(200, 'the report the old app changed', 'GET', `${reports}/${panel}`);
+    flow.expectValue(
+      'its own file has a link, the other record’s has none',
+      '[.data.files[] | .file_url != null] | map(tostring) | join(",")',
+      'true,false',
+    );
+
+    // v9.4.1's POST inserts the record and binds nothing
+    const copy = generatePublicId('patientReport');
+    await operatorQuery`
+      INSERT INTO app.patient_reports
+      SELECT (jsonb_populate_record(NULL::app.patient_reports, to_jsonb(report) || jsonb_build_object(
+        'id', nextval(pg_get_serial_sequence('app.patient_reports', 'id')),
+        'public_id', ${copy}::text,
+        'file_keys', ARRAY[${inserted}]::text[]))).*
+      FROM app.patient_reports AS report WHERE report.public_id = ${panel}
+    `;
+    expect(await boundTo(inserted)).toBe(`patient_report:${copy}`);
   });
 });
