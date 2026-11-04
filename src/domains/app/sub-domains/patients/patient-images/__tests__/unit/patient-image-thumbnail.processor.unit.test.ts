@@ -4,6 +4,7 @@ const repository = {
   findByPublicId: vi.fn(),
   setThumbnailKey: vi.fn(),
   clearThumbnailKey: vi.fn(),
+  markThumbnailSkipped: vi.fn(),
 };
 let insideContext = false;
 
@@ -25,7 +26,10 @@ vi.mock(
   () => ({ createWorkerPatientImageThumbnailRepository: () => repository }),
 );
 
-import { syncPatientImageThumbnail } from '@/domains/app/sub-domains/patients/patient-images/workers/patient-image-thumbnail.processor.js';
+import {
+  markPatientImageThumbnailJobFailed,
+  syncPatientImageThumbnail,
+} from '@/domains/app/sub-domains/patients/patient-images/workers/patient-image-thumbnail.processor.js';
 
 const ORGANIZATION = 'org_abc';
 const FILE_KEY = `organization-files/${ORGANIZATION}/photo.jpg`;
@@ -53,6 +57,7 @@ describe('syncPatientImageThumbnail', () => {
     vi.clearAllMocks();
     repository.setThumbnailKey.mockResolvedValue(true);
     repository.clearThumbnailKey.mockResolvedValue(true);
+    repository.markThumbnailSkipped.mockResolvedValue(true);
   });
 
   it('makes a live photo’s thumbnail and records its key', async () => {
@@ -107,19 +112,33 @@ describe('syncPatientImageThumbnail', () => {
     expect(storage.deleteThumbnail).not.toHaveBeenCalled();
   });
 
-  it('leaves the photo on its full-size fallback when the source cannot be used', async () => {
+  it.each(['source_unusable', 'source_missing', 'not_opted_in'] as const)(
+    'leaves the photo on its full-size fallback and records %s, so the sweep stops',
+    async (reason) => {
+      repository.findByPublicId.mockResolvedValue({
+        id: 7,
+        fileKey: FILE_KEY,
+        thumbnailKey: null,
+        deletedAt: null,
+      });
+      storage.createThumbnail.mockResolvedValueOnce({ kind: 'skipped', reason } as never);
+      await expect(run()).resolves.toEqual({ outcome: 'skipped', reason });
+      expect(repository.setThumbnailKey).not.toHaveBeenCalled();
+      expect(repository.markThumbnailSkipped).toHaveBeenCalledWith({ id: 7, reason });
+    },
+  );
+
+  it('never hands a photo whose job crashed (job_failed) to the decoder again', async () => {
     repository.findByPublicId.mockResolvedValue({
       id: 7,
       fileKey: FILE_KEY,
       thumbnailKey: null,
+      thumbnailSkipReason: 'job_failed',
       deletedAt: null,
     });
-    storage.createThumbnail.mockResolvedValueOnce({
-      kind: 'skipped',
-      reason: 'source_unusable',
-    } as never);
-    await expect(run()).resolves.toEqual({ outcome: 'skipped', reason: 'source_unusable' });
-    expect(repository.setThumbnailKey).not.toHaveBeenCalled();
+    await expect(run()).resolves.toEqual({ outcome: 'skipped', reason: 'job_failed' });
+    expect(storage.createThumbnail).not.toHaveBeenCalled();
+    expect(repository.markThumbnailSkipped).not.toHaveBeenCalled();
   });
 
   it('lets a storage failure through so BullMQ retries, writing nothing', async () => {
@@ -132,5 +151,46 @@ describe('syncPatientImageThumbnail', () => {
     storage.createThumbnail.mockRejectedValueOnce(new Error('S3 503'));
     await expect(run()).rejects.toThrow('S3 503');
     expect(repository.setThumbnailKey).not.toHaveBeenCalled();
+    expect(repository.markThumbnailSkipped, 'a retry is no final skip').not.toHaveBeenCalled();
+  });
+});
+
+/** A job that failed for good (a crash past the stall limit, or every attempt used) marks its photo. */
+describe('markPatientImageThumbnailJobFailed', () => {
+  const run = () =>
+    markPatientImageThumbnailJobFailed({
+      organizationPublicId: ORGANIZATION,
+      patientImagePublicId: 'pimg_abc',
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    repository.markThumbnailSkipped.mockResolvedValue(true);
+  });
+
+  it('records job_failed on a live photo without a thumbnail, in the organization’s context', async () => {
+    repository.findByPublicId.mockImplementation(async () => {
+      expect(insideContext).toBe(true);
+      return { id: 7, fileKey: FILE_KEY, thumbnailKey: null, deletedAt: null };
+    });
+    await expect(run()).resolves.toBe(true);
+    expect(repository.findByPublicId).toHaveBeenCalledWith({
+      publicId: 'pimg_abc',
+      organizationPublicId: ORGANIZATION,
+    });
+    expect(repository.markThumbnailSkipped).toHaveBeenCalledWith({ id: 7, reason: 'job_failed' });
+  });
+
+  it.each([
+    ['a photo that is gone', null],
+    ['a deleted photo', { id: 7, fileKey: FILE_KEY, thumbnailKey: null, deletedAt: new Date() }],
+    [
+      'a photo that has its thumbnail',
+      { id: 7, fileKey: FILE_KEY, thumbnailKey: THUMBNAIL_KEY, deletedAt: null },
+    ],
+  ])('leaves %s alone', async (_label, row) => {
+    repository.findByPublicId.mockResolvedValue(row);
+    await expect(run()).resolves.toBe(false);
+    expect(repository.markThumbnailSkipped).not.toHaveBeenCalled();
   });
 });

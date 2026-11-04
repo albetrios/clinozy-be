@@ -2,10 +2,14 @@ import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import {
   buildThumbnailObjectKey,
+  configureImageThumbnailDecoder,
   createImageThumbnail,
+  UPLOAD_THUMBNAIL_MAX_DECODED_BYTES,
   UPLOAD_THUMBNAIL_MAX_DIMENSION,
+  UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS,
   UploadThumbnailSourceError,
 } from '@/domains/upload/utils/upload-thumbnail.util.js';
+import { oversizedJpegHeader, oversizedPngHeader } from '@/tests/helpers/oversized-image.helper.js';
 
 /** A solid JPEG of the given size, with an EXIF orientation and a camera make. */
 async function jpeg({
@@ -71,5 +75,96 @@ describe('createImageThumbnail', () => {
     await expect(createImageThumbnail(Buffer.from('not an image'))).rejects.toBeInstanceOf(
       UploadThumbnailSourceError,
     );
+  });
+
+  it('refuses an image over the pixel cap from its header, before decoding it', async () => {
+    // 9000 × 9000 = 81 MP in 70-odd bytes — under sharp's own 268 MP default, over the 64 MP cap
+    const bomb = oversizedPngHeader({ width: 9000, height: 9000 });
+    expect(9000 * 9000).toBeGreaterThan(UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS);
+    const refusal = await createImageThumbnail(bomb).catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(UploadThumbnailSourceError);
+    expect(((refusal as Error).cause as Error).message).toMatch(/exceeds pixel limit/);
+  });
+
+  it('refuses an image under the pixel cap that would decode past the budget (16-bit), before decoding it', async () => {
+    // 7999 × 8000 × 3 samples × 2 bytes = 384 MB decoded (review: 645 MiB RSS in the worker)
+    expect(7999 * 8000).toBeLessThan(UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS);
+    expect(7999 * 8000 * 3 * 2).toBeGreaterThan(UPLOAD_THUMBNAIL_MAX_DECODED_BYTES);
+    const refusal = await createImageThumbnail(
+      oversizedPngHeader({ width: 7999, height: 8000, bitDepth: 16 }),
+    ).catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(UploadThumbnailSourceError);
+    expect(((refusal as Error).cause as Error).message).toMatch(/over the 192000000-byte budget/);
+  });
+
+  it('lets an 8-bit photo at the pixel cap through to the decoder (8000 × 8000 × 3 = the budget)', async () => {
+    expect(8000 * 8000 * 3).toBe(UPLOAD_THUMBNAIL_MAX_DECODED_BYTES);
+    const refusal = await createImageThumbnail(
+      oversizedPngHeader({ width: 8000, height: 8000 }),
+    ).catch((error: unknown) => error);
+    // Its header passes both caps, so the decoder reads on and finds the image data empty
+    expect(((refusal as Error).cause as Error).message).not.toMatch(/pixel limit|budget/);
+  });
+});
+
+describe('createImageThumbnail — progressive JPEG', () => {
+  /** Whether a header passes both caps (its decode then finds no image data, or tolerates it). */
+  async function passesCaps(header: Buffer): Promise<boolean> {
+    const refusal = await createImageThumbnail(header).then(
+      () => null,
+      (error: unknown) => error as Error,
+    );
+    return refusal === null || !/pixel limit|budget/.test((refusal.cause as Error).message);
+  }
+
+  it('refuses a progressive 4:4:4 JPEG whose coefficients pass the budget (review: 441 MiB peak)', async () => {
+    // 7999 × 8000 × 3 samples × 2 bytes = 384 MB of DCT coefficients, though 192 MB decoded
+    const refusal = await createImageThumbnail(
+      oversizedJpegHeader({
+        width: 7999,
+        height: 8000,
+        progressive: true,
+        chromaSubsampling: '4:4:4',
+      }),
+    ).catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(UploadThumbnailSourceError);
+    expect(((refusal as Error).cause as Error).message).toMatch(
+      /383952000 bytes, over the 192000000-byte budget/,
+    );
+  });
+
+  it('lets a progressive 4:2:0 phone photo through (48 MP, 8064 × 6048: 146 MB of coefficients)', async () => {
+    expect(
+      await passesCaps(
+        oversizedJpegHeader({
+          width: 8064,
+          height: 6048,
+          progressive: true,
+          chromaSubsampling: '4:2:0',
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('counts a baseline JPEG as decoded, not as coefficients (64 MP 4:4:4 passes)', async () => {
+    expect(
+      await passesCaps(
+        oversizedJpegHeader({
+          width: 8000,
+          height: 8000,
+          progressive: false,
+          chromaSubsampling: '4:4:4',
+        }),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('configureImageThumbnailDecoder', () => {
+  it('turns the libvips cache off and decodes each image on one thread', () => {
+    configureImageThumbnailDecoder();
+    expect(sharp.concurrency()).toBe(1);
+    const cache = sharp.cache();
+    expect([cache.memory.max, cache.files.max, cache.items.max]).toEqual([0, 0, 0]);
   });
 });

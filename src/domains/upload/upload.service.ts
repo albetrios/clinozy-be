@@ -29,6 +29,7 @@ import {
   buildPendingObjectKey,
   buildUserAvatarKeyPrefix,
   stripPendingObjectKeyPrefix,
+  type UploadThumbnailSkipReason,
 } from './upload.constants.js';
 import { getCanonicalExtensionForContentType } from './utils/upload-content-type.util.js';
 import { isSvgContentType, sanitizeSvgBuffer } from './utils/upload-svg.util.js';
@@ -568,8 +569,11 @@ export class UploadService {
    *   database access — it runs between a worker's database contexts.
    * - **Failure modes:** answers `skipped` (never throws) for a key outside the organization's
    *   opted-in prefixes (`not_opted_in`), a stored file that is gone (`source_missing`), a type
-   *   the purpose does not opt in or bytes no decoder reads (`source_unusable`); any other
-   *   storage error propagates (the caller retries).
+   *   the purpose does not opt in, or bytes the decoder refuses — corrupt, over the pixel or
+   *   decoded-size cap, or past the time limit (`source_unusable`, warn-logged with the decoder's
+   *   message); each is
+   *   final for that file (`UPLOAD_THUMBNAIL_SKIP_REASON_VALUES`). Any other storage error
+   *   propagates (the caller retries).
    * - **Side effects:** one GET and one PUT on the object store; overwrites an earlier thumbnail
    *   of the same source (the same bytes — idempotent).
    */
@@ -578,7 +582,7 @@ export class UploadService {
     fileKey: string;
   }): Promise<
     | { kind: 'created'; thumbnailKey: string }
-    | { kind: 'skipped'; reason: 'not_opted_in' | 'source_missing' | 'source_unusable' }
+    | { kind: 'skipped'; reason: UploadThumbnailSkipReason }
   > {
     const purpose = organizationThumbnailPurpose(options);
     if (purpose === null || isThumbnailObjectKey(options.fileKey)) {
@@ -595,6 +599,13 @@ export class UploadService {
       thumbnail = await createImageThumbnail(stored.body);
     } catch (error) {
       if (error instanceof UploadThumbnailSourceError) {
+        logger.warn(
+          {
+            fileKey: options.fileKey,
+            detail: error.cause instanceof Error ? error.cause.message : String(error.cause),
+          },
+          'upload.thumbnail_source_refused',
+        );
         return { kind: 'skipped', reason: 'source_unusable' };
       }
       throw error;

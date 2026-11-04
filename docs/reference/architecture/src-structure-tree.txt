@@ -736,6 +736,7 @@ src/
     │   │   │   │   │   │   ├── patient-image-thumbnail-reconcile.processor.unit.test.ts
     │   │   │   │   │   │   ├── patient-image-thumbnail.processor.unit.test.ts
     │   │   │   │   │   │   ├── patient-image-thumbnail.queue.unit.test.ts
+    │   │   │   │   │   │   ├── patient-image-thumbnail.worker.unit.test.ts
     │   │   │   │   │   │   └── patient-images.service.unit.test.ts
     │   │   │   │   ├── queues/
     │   │   │   │   │   ├── patient-image-thumbnail.job.schema.ts
@@ -3028,6 +3029,7 @@ src/
     │   ├── organization-filter-audit.allowlist.ts
     │   ├── organization-filter-audit.setup.ts
     │   ├── organization-filter-audit.ts
+    │   ├── oversized-image.helper.ts
     │   ├── principal-scope.helper.ts
     │   ├── redis-mock.helper.ts
     │   ├── registered-route.util.ts

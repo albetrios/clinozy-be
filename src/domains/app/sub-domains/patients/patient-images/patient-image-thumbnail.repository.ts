@@ -1,6 +1,7 @@
 import { and, asc, eq, gt, gte, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { assertWorkerDatabaseContext } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
+import type { PatientImageThumbnailSkipReason } from './patient-images.constants.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { patient_images } from './patient-images.schema.js';
 
@@ -9,6 +10,8 @@ export interface PatientImageThumbnailRow {
   id: number;
   fileKey: string;
   thumbnailKey: string | null;
+  /** Why an earlier run made none (`thumbnail_skip_reason`), or null. */
+  thumbnailSkipReason: string | null;
   deletedAt: Date | null;
 }
 
@@ -26,8 +29,9 @@ export interface PatientImageThumbnailCandidate {
  * @remarks
  * - **Algorithm:** {@link PatientImageThumbnailRepository.findByPublicId} reads a photo, live or
  *   deleted; {@link PatientImageThumbnailRepository.setThumbnailKey} fills an empty
- *   `thumbnail_key` and {@link PatientImageThumbnailRepository.clearThumbnailKey} empties the one
- *   it removed — each a compare-and-set, so a retried or overtaken job changes nothing twice.
+ *   `thumbnail_key`, {@link PatientImageThumbnailRepository.clearThumbnailKey} empties the one
+ *   it removed, and {@link PatientImageThumbnailRepository.markThumbnailSkipped} records why none
+ *   can be made — each a compare-and-set, so a retried or overtaken job changes nothing twice.
  * - **Notes:** neither write touches `updated_at`: the thumbnail is the system's, not an edit (a
  *   save holding the `updated_at` it read stays valid).
  */
@@ -50,6 +54,7 @@ export class PatientImageThumbnailRepository {
         id: patient_images.id,
         fileKey: patient_images.file_key,
         thumbnailKey: patient_images.thumbnail_key,
+        thumbnailSkipReason: patient_images.thumbnail_skip_reason,
         deletedAt: patient_images.deleted_at,
       })
       .from(patient_images)
@@ -64,7 +69,10 @@ export class PatientImageThumbnailRepository {
     return row ?? null;
   }
 
-  /** Sets `thumbnail_key` when it is still empty; true when this call set it. */
+  /**
+   * Sets `thumbnail_key` when it is still empty, clearing a skip reason an earlier run recorded;
+   * true when this call set it.
+   */
   async setThumbnailKey({
     id,
     thumbnailKey,
@@ -74,7 +82,7 @@ export class PatientImageThumbnailRepository {
   }): Promise<boolean> {
     const rows = await this.databaseHandle
       .update(patient_images)
-      .set({ thumbnail_key: thumbnailKey })
+      .set({ thumbnail_key: thumbnailKey, thumbnail_skip_reason: null })
       .where(and(eq(patient_images.id, id), isNull(patient_images.thumbnail_key)))
       .returning({ id: patient_images.id });
     return rows.length > 0;
@@ -95,6 +103,25 @@ export class PatientImageThumbnailRepository {
       .returning({ id: patient_images.id });
     return rows.length > 0;
   }
+
+  /**
+   * Records why the job made no thumbnail when the photo still has none — the sweep and the
+   * backfill then pass it by; true when this call recorded it.
+   */
+  async markThumbnailSkipped({
+    id,
+    reason,
+  }: {
+    id: number;
+    reason: PatientImageThumbnailSkipReason;
+  }): Promise<boolean> {
+    const rows = await this.databaseHandle
+      .update(patient_images)
+      .set({ thumbnail_skip_reason: reason })
+      .where(and(eq(patient_images.id, id), isNull(patient_images.thumbnail_key)))
+      .returning({ id: patient_images.id });
+    return rows.length > 0;
+  }
 }
 
 /** The thumbnail job's repository on a handle pinned to an organization's context. */
@@ -107,8 +134,8 @@ export function createWorkerPatientImageThumbnailRepository(
 
 /**
  * The sweep's page of photos whose thumbnail does not match their row (lost enqueues): live ones
- * created inside `[createdAfter, createdBefore)` without a thumbnail, and deleted ones still
- * holding one — in id order after `afterId`, across organizations.
+ * created inside `[createdAfter, createdBefore)` without a thumbnail or a skip reason, and deleted
+ * ones still holding one — in id order after `afterId`, across organizations.
  *
  * @remarks
  * - **Notes:** reads under the global retention cleanup context (the table's retention arm).
@@ -133,6 +160,7 @@ export async function findPatientImagesOutOfThumbnailSync(
           and(
             isNull(patient_images.deleted_at),
             isNull(patient_images.thumbnail_key),
+            isNull(patient_images.thumbnail_skip_reason),
             gte(patient_images.created_at, options.createdAfter),
             lt(patient_images.created_at, options.createdBefore),
           ),
@@ -145,8 +173,8 @@ export async function findPatientImagesOutOfThumbnailSync(
 }
 
 /**
- * The backfill's page of organizations holding a live photo without a thumbnail, in id order
- * after `afterId`.
+ * The backfill's page of organizations holding a live photo without a thumbnail or a skip reason,
+ * in id order after `afterId`.
  *
  * @remarks
  * - **Notes:** reads under the global retention cleanup context.
@@ -162,7 +190,7 @@ export async function findOrganizationsWithPhotosWithoutThumbnail(
     .where(
       and(
         gt(organizations.id, options.afterId),
-        sql`exists (select 1 from ${patient_images} where ${patient_images.organization_id} = ${organizations.id} and ${patient_images.deleted_at} is null and ${patient_images.thumbnail_key} is null)`,
+        sql`exists (select 1 from ${patient_images} where ${patient_images.organization_id} = ${organizations.id} and ${patient_images.deleted_at} is null and ${patient_images.thumbnail_key} is null and ${patient_images.thumbnail_skip_reason} is null)`,
       ),
     )
     .orderBy(asc(organizations.id))
@@ -170,8 +198,8 @@ export async function findOrganizationsWithPhotosWithoutThumbnail(
 }
 
 /**
- * The backfill's page of one organization's live photos without a thumbnail, in id order after
- * `afterId`.
+ * The backfill's page of one organization's live photos without a thumbnail or a skip reason, in
+ * id order after `afterId`.
  *
  * @remarks
  * - **Notes:** reads under the global retention cleanup context.
@@ -190,6 +218,7 @@ export async function findPhotosWithoutThumbnail(
         gt(patient_images.id, options.afterId),
         isNull(patient_images.deleted_at),
         isNull(patient_images.thumbnail_key),
+        isNull(patient_images.thumbnail_skip_reason),
       ),
     )
     .orderBy(asc(patient_images.id))

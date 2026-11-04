@@ -16,6 +16,8 @@ import {
   findPhotosWithoutThumbnail,
 } from '@/domains/app/sub-domains/patients/patient-images/patient-image-thumbnail.repository.js';
 import { syncPatientImageThumbnail } from '@/domains/app/sub-domains/patients/patient-images/workers/patient-image-thumbnail.processor.js';
+import { recordPatientImageThumbnailFinalFailure } from '@/domains/app/sub-domains/patients/patient-images/workers/patient-image-thumbnail.worker.js';
+import { UnrecoverableError } from 'bullmq';
 
 /**
  * A patient photo's thumbnail kept in step with its row (feat-patient-image-thumbnails): the real
@@ -179,5 +181,107 @@ describe('Patient image thumbnails — integration', () => {
     );
     await expect(runJob()).resolves.toEqual({ outcome: 'created', thumbnailKey });
     expect(await storedThumbnailKey()).toBe(thumbnailKey);
+  });
+
+  it('5. a photo the job cannot use records why, and the sweep and the backfill stop asking', async () => {
+    const brokenKey = `organization-files/${fixture.organization.publicId}/${lastName}-broken.jpg`;
+    await operatorQuery`
+      INSERT INTO upload.uploads (public_id, user_id, organization_id, file_name, file_key, mime_type,
+        file_size, bucket, status, uploaded_at)
+      VALUES (${generatePublicId('upload')}, ${fixture.members.owner.userId}, ${fixture.organization.id},
+        'broken.jpg', ${brokenKey}, 'image/jpeg', 4096, 'local', 'UPLOADED', now())
+    `;
+    await flow.expect(200, 'a second photo', 'POST', images, { file_key: brokenKey });
+    const broken = flow.last('.data.id');
+    // Past the sweep's 10-minute grace, inside its week
+    await operatorQuery`
+      UPDATE app.patient_images SET created_at = now() - interval '1 hour', updated_at = now()
+      WHERE public_id = ${broken}
+    `;
+    expect(await sweepCandidates(), 'before its job: a lost enqueue to re-add').toContain(broken);
+
+    const runBrokenJob = () =>
+      syncPatientImageThumbnail({
+        organizationPublicId: fixture.organization.publicId,
+        patientImagePublicId: broken,
+        storage,
+      });
+    storage.createThumbnail.mockResolvedValueOnce({
+      kind: 'skipped',
+      reason: 'source_unusable',
+    } as never);
+    await expect(runBrokenJob()).resolves.toEqual({
+      outcome: 'skipped',
+      reason: 'source_unusable',
+    });
+    const [marked] = await operatorQuery<
+      { thumbnail_key: string | null; thumbnail_skip_reason: string | null }[]
+    >`SELECT thumbnail_key, thumbnail_skip_reason FROM app.patient_images WHERE public_id = ${broken}`;
+    expect(marked).toEqual({ thumbnail_key: null, thumbnail_skip_reason: 'source_unusable' });
+    expect(await sweepCandidates(), 'the sweep passes it by').not.toContain(broken);
+    expect((await backfillCandidates()).photos, 'so does the backfill').not.toContain(broken);
+    await flow.expect(200, 'it still opens', 'GET', `${images}/${broken}`);
+    flow.expectValue('on its full-size fallback', '.data.thumbnail_url == .data.file_url', true);
+
+    // A later run that makes it (a restore re-enqueues) clears the reason
+    await expect(runBrokenJob()).resolves.toMatchObject({ outcome: 'created' });
+    const [made] = await operatorQuery<{ thumbnail_skip_reason: string | null }[]>`
+      SELECT thumbnail_skip_reason FROM app.patient_images WHERE public_id = ${broken}
+    `;
+    expect(made?.thumbnail_skip_reason).toBeNull();
+    await expect(
+      operatorQuery`UPDATE app.patient_images SET thumbnail_skip_reason = 'source_missing' WHERE public_id = ${broken}`,
+      'a thumbnail and a skip reason never stand together',
+    ).rejects.toThrow(/chk_patient_images_thumbnail_or_skip/);
+  });
+  it('6. a photo whose job crashed the worker (stalled past the limit) is marked job_failed and never re-queued', async () => {
+    const crashKey = `organization-files/${fixture.organization.publicId}/${lastName}-crash.jpg`;
+    await operatorQuery`
+      INSERT INTO upload.uploads (public_id, user_id, organization_id, file_name, file_key, mime_type,
+        file_size, bucket, status, uploaded_at)
+      VALUES (${generatePublicId('upload')}, ${fixture.members.owner.userId}, ${fixture.organization.id},
+        'crash.jpg', ${crashKey}, 'image/jpeg', 4096, 'local', 'UPLOADED', now())
+    `;
+    await flow.expect(200, 'a third photo', 'POST', images, { file_key: crashKey });
+    const crashed = flow.last('.data.id');
+    await operatorQuery`
+      UPDATE app.patient_images SET created_at = now() - interval '1 hour', updated_at = now()
+      WHERE public_id = ${crashed}
+    `;
+    expect(await sweepCandidates(), 'before: the sweep would re-queue it').toContain(crashed);
+
+    // What BullMQ's failed event hands the listener when the job stalled more than maxStalledCount
+    // times: the worker died under it twice, so the job fails without running again
+    await expect(
+      recordPatientImageThumbnailFinalFailure({
+        job: {
+          name: 'sync',
+          data: {
+            organizationPublicId: fixture.organization.publicId,
+            patientImagePublicId: crashed,
+          },
+          opts: { attempts: 5 },
+          attemptsMade: 1,
+        },
+        error: new UnrecoverableError('job stalled more than allowable limit'),
+      }),
+    ).resolves.toBe(true);
+    const [marked] = await operatorQuery<{ thumbnail_skip_reason: string | null }[]>`
+      SELECT thumbnail_skip_reason FROM app.patient_images WHERE public_id = ${crashed}
+    `;
+    expect(marked?.thumbnail_skip_reason).toBe('job_failed');
+    expect(await sweepCandidates(), 'the sweep passes it by').not.toContain(crashed);
+    expect((await backfillCandidates()).photos, 'so does the backfill').not.toContain(crashed);
+
+    // A job already queued behind the crashed one does not hand the file to the decoder again
+    storage.createThumbnail.mockClear();
+    await expect(
+      syncPatientImageThumbnail({
+        organizationPublicId: fixture.organization.publicId,
+        patientImagePublicId: crashed,
+        storage,
+      }),
+    ).resolves.toEqual({ outcome: 'skipped', reason: 'job_failed' });
+    expect(storage.createThumbnail).not.toHaveBeenCalled();
   });
 });

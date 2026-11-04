@@ -6,6 +6,7 @@ import type { UploadRepository } from '@/domains/upload/upload.repository.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import { createObjectStoragePortMock } from '@/tests/helpers/object-storage-mock.helper.js';
+import { oversizedPngHeader } from '@/tests/helpers/oversized-image.helper.js';
 
 vi.mock('@/shared/config/env.config.js', () => ({
   getEnv: vi.fn(() => ({ S3_BUCKET: 'test-bucket', LOG_LEVEL: 'silent' })),
@@ -80,6 +81,17 @@ describe('UploadService thumbnails', () => {
       vi.mocked(storage.getObject).mockResolvedValueOnce({
         body: Buffer.from('corrupt'),
         contentType: 'image/jpeg',
+      });
+      await expect(
+        service.createThumbnail({ organizationPublicId: ORGANIZATION, fileKey: FILE_KEY }),
+      ).resolves.toEqual({ kind: 'skipped', reason: 'source_unusable' });
+      expect(storage.putObject).not.toHaveBeenCalled();
+    });
+
+    it('skips an image over the pixel cap as unusable, writing nothing', async () => {
+      vi.mocked(storage.getObject).mockResolvedValueOnce({
+        body: oversizedPngHeader({ width: 9000, height: 9000 }),
+        contentType: 'image/png',
       });
       await expect(
         service.createThumbnail({ organizationPublicId: ORGANIZATION, fileKey: FILE_KEY }),

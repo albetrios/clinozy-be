@@ -75,8 +75,18 @@ This domain implements the contracts documented in [src/PATTERNS.md](src/PATTERN
   `<key without extension>.thumb.webp`; `deleteThumbnail` removes it; `createThumbnailReadUrls`
   signs 15-minute links. A thumbnail is no upload row, so each call checks the key itself (the
   organization's own prefix and the thumbnail suffix); none touches the database, so a worker
-  calls them between its database contexts. A missing or unreadable source is a `skipped` answer,
-  never an error. Callers: the patient image thumbnail job.
+  calls them between its database contexts. A missing or unreadable source is a `skipped` answer
+  (`UPLOAD_THUMBNAIL_SKIP_REASON_VALUES`, each final for the file), never an error. The decoder is
+  bounded before it decodes: from the header, a source over `UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS`
+  (64 MP — a small PNG can claim gigapixels) or one that would decode to more than
+  `UPLOAD_THUMBNAIL_MAX_DECODED_BYTES` (192 MB, width × height × channels × bytes per sample — a
+  16-bit or alpha PNG takes more per pixel; a progressive JPEG counts its DCT coefficients, width ×
+  height × samples per pixel × 2, since it cannot shrink while it loads) is refused, and so is one
+  still running past
+  `UPLOAD_THUMBNAIL_TIMEOUT_SECONDS` (30 s); each is `source_unusable` (warn
+  `upload.thumbnail_source_refused` with the decoder's message). The worker sets the decoder up
+  once (`configureImageThumbnailDecoder`: no libvips cache, one thread). Callers: the patient
+  image thumbnail job.
 
 The upload domain is consumed by other domains rather than driving any flow itself. Notable consumers:
 

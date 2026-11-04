@@ -36,6 +36,29 @@ Container memory (Railway slider / Kubernetes `limits.memory`) is often expresse
 
 The worker process logs a warning when **RSS** exceeds **512 MiB** ([`src/infrastructure/queue/bootstrap.ts`](../../../src/infrastructure/queue/bootstrap.ts)). If the container limit is **below ~768 MiB**, every healthy worker may trip that threshold — tune the deployment (more memory), lower concurrency (`WORKER_CONCURRENCY`), or eventually adjust the threshold in code if intentional.
 
+The patient image thumbnail job is the worker's one image decoder: one photo at a time, with the
+libvips cache off and one libvips thread. Before decoding, the header must show at most 64 MP
+(`UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS`) and at most 192 MB decoded (`UPLOAD_THUMBNAIL_MAX_DECODED_BYTES`:
+width × height × channels × bytes per sample; for a progressive JPEG, its DCT coefficients — width ×
+height × samples per pixel × 2), and the work stops at 30 s. Peak RSS measured through the pipeline
+in a bare Node process of about 40 MiB:
+
+| Source (64 MP unless noted) | Peak RSS | Header check |
+| --------------------------- | -------- | ------------ |
+| baseline JPEG, 4:4:4 (shrinks while it loads) | 75 MiB | passes |
+| progressive JPEG, 4:2:0, 48 MP phone photo | 214 MiB | passes |
+| progressive JPEG, 4:2:0 | 258 MiB | passes |
+| interlaced PNG, 8-bit RGB | 280 MiB | passes |
+| progressive JPEG, 4:2:2 (reported as 4:2:0 by `sharp`) | 319 MiB | passes |
+| interlaced PNG, 8-bit RGBA | 357 MiB | refused |
+| progressive JPEG, 4:4:4 (1.1 MB of file) | 441 MiB | refused |
+| interlaced PNG, 16-bit RGB (570 KB of file) | 489 MiB (645 MiB in the worker) | refused |
+
+So a decode adds up to about 280 MiB to the worker. Give the worker container at least 768 MiB. If a
+file still kills the worker, its job stalls; past BullMQ's stall limit the job fails for good and the
+photo is marked `thumbnail_skip_reason = 'job_failed'`, so the sweep never hands it to the worker
+again — a crash costs at most two worker restarts per photo, not one every 15 minutes.
+
 ### Postgres connection budget
 
 Each **API** and **worker** process opens **two** node-postgres pools: the primary one (`DATABASE_POOL_MAX`, default **70**) and the maintenance role's (`DATABASE_MAINTENANCE_POOL_MAX`, default **10** — mail outbox and ledger workers, retention purges, system audit inserts, all short checkouts). Size deployments so:

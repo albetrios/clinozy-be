@@ -58,7 +58,19 @@ A private photo also needs `patient:private_album:read` on every route (P23).
   behind a running one); a failed enqueue or thumbnail never fails the write — the 15-minute
   `reconcile-patient-image-thumbnails` sweep re-adds photos created 10 minutes to 7 days ago
   without one and deleted ones still holding one, and `pnpm ops:patient-image-thumbnails-backfill`
-  (dry run unless `--apply`) the older ones, organization by organization.
+  (dry run unless `--apply`) the older ones, organization by organization. A photo the upload
+  domain cannot use — outside the opted-in prefixes, its file gone, or bytes it refuses (corrupt,
+  over 64 MP or 192 MB decoded, past 30 s) — keeps its full-size fallback, and the job records why
+  (`thumbnail_skip_reason`); the sweep and the backfill pass such a photo by, so it is not decoded
+  again every 15 minutes. So does a photo whose job failed for good — it stalled past BullMQ's
+  limit (the worker died under it, an out-of-memory kill included) or used every attempt: the
+  worker's `failed` listener records `job_failed` in the job's organization context
+  (`recordPatientImageThumbnailFinalFailure`), so no crash loops through the sweep. Every reason is
+  final, a timeout included (30 s is about 25 times a 64 MP decode on one thread). A later run that
+  makes the thumbnail (a restore) clears the reason — except after `job_failed`, which no job
+  decodes again (one queued behind the crashed job is skipped too). To retry a photo by hand,
+  clear its `thumbnail_skip_reason` and run the backfill. A thumbnail and
+  a reason never stand together (`chk_patient_images_thumbnail_or_skip`).
 - **Pairing (WC-43):** a session's `before` and `after` photos of one body part pair on
   `patient_treatment_id`, `stage` and `body_part` (P24) — read, not computed.
 - **The links (P24, P25, TR3):** the visit is the patient's contact's and checked in or completed;
