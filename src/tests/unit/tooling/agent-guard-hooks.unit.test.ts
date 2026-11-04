@@ -6,6 +6,7 @@ import {
   createScratchFolder,
   removeScratchFolders,
 } from '@/tests/helpers/git-repository.helper.js';
+import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
 
 const repositoryRoot = process.cwd();
 const hooksDirectory = join(repositoryRoot, 'agent-os', 'hooks');
@@ -474,8 +475,11 @@ function runHook(script: string, stdin: string) {
     timeout: 15_000,
     // TMPDIR keeps the reminders' once-per-turn record (_be-turn-once.mjs) per run, and
     // CLAUDE_CODE_REMOTE=false keeps a web session's eval from starting dockerd or the stack.
+    // Without a git hook's inherited GIT_DIR (this suite runs from pre-push too): with it, the
+    // hook's git calls answered for the pushing repository, and its push review gate warned on a
+    // branch that changes migrations, so the "stays silent" cases failed only at push time.
     env: {
-      ...process.env,
+      ...gitEnvironmentWithoutInheritedRepository(),
       CLAUDE_PROJECT_DIR: scratchRoot,
       TMPDIR: scratchRoot,
       CLAUDE_CODE_REMOTE: 'false',
