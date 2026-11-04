@@ -9,7 +9,7 @@ import {
   UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS,
   UploadThumbnailSourceError,
 } from '@/domains/upload/utils/upload-thumbnail.util.js';
-import { oversizedPngHeader } from '@/tests/helpers/oversized-image.helper.js';
+import { oversizedJpegHeader, oversizedPngHeader } from '@/tests/helpers/oversized-image.helper.js';
 
 /** A solid JPEG of the given size, with an EXIF orientation and a camera make. */
 async function jpeg({
@@ -104,6 +104,59 @@ describe('createImageThumbnail', () => {
     ).catch((error: unknown) => error);
     // Its header passes both caps, so the decoder reads on and finds the image data empty
     expect(((refusal as Error).cause as Error).message).not.toMatch(/pixel limit|budget/);
+  });
+});
+
+describe('createImageThumbnail — progressive JPEG', () => {
+  /** Whether a header passes both caps (its decode then finds no image data, or tolerates it). */
+  async function passesCaps(header: Buffer): Promise<boolean> {
+    const refusal = await createImageThumbnail(header).then(
+      () => null,
+      (error: unknown) => error as Error,
+    );
+    return refusal === null || !/pixel limit|budget/.test((refusal.cause as Error).message);
+  }
+
+  it('refuses a progressive 4:4:4 JPEG whose coefficients pass the budget (review: 441 MiB peak)', async () => {
+    // 7999 × 8000 × 3 samples × 2 bytes = 384 MB of DCT coefficients, though 192 MB decoded
+    const refusal = await createImageThumbnail(
+      oversizedJpegHeader({
+        width: 7999,
+        height: 8000,
+        progressive: true,
+        chromaSubsampling: '4:4:4',
+      }),
+    ).catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(UploadThumbnailSourceError);
+    expect(((refusal as Error).cause as Error).message).toMatch(
+      /383952000 bytes, over the 192000000-byte budget/,
+    );
+  });
+
+  it('lets a progressive 4:2:0 phone photo through (48 MP, 8064 × 6048: 146 MB of coefficients)', async () => {
+    expect(
+      await passesCaps(
+        oversizedJpegHeader({
+          width: 8064,
+          height: 6048,
+          progressive: true,
+          chromaSubsampling: '4:2:0',
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('counts a baseline JPEG as decoded, not as coefficients (64 MP 4:4:4 passes)', async () => {
+    expect(
+      await passesCaps(
+        oversizedJpegHeader({
+          width: 8000,
+          height: 8000,
+          progressive: false,
+          chromaSubsampling: '4:4:4',
+        }),
+      ),
+    ).toBe(true);
   });
 });
 

@@ -1,4 +1,4 @@
-import sharp from 'sharp';
+import sharp, { type Metadata } from 'sharp';
 
 /** The longest side of a thumbnail, in pixels — a smaller image is never enlarged. */
 export const UPLOAD_THUMBNAIL_MAX_DIMENSION = 320;
@@ -35,11 +35,18 @@ export const UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS = 64_000_000;
  *   40 MiB of its own): an 8000 × 8000 8-bit RGB interlaced PNG (192 MB) peaked at 280 MiB RSS; an
  *   8-bit RGBA one (256 MB) at 357 MiB; a 7999 × 8000 16-bit RGB one (384 MB, 570 KB of file) at
  *   489 MiB — 645 MiB inside the worker in review. At 192 MB a decode adds about 240 MiB to the
- *   process at worst; a photo with alpha gets up to 48 MP, a 16-bit one up to 32 MP. A JPEG
- *   decodes far smaller while it loads (shrink-on-load); counting it at full size refuses only a
- *   CMYK JPEG over 48 MP.
- * - **Notes:** computed from the header (width × height × channels × bytes per sample), before any
- *   pixel is decoded.
+ *   process at worst; a photo with alpha gets up to 48 MP, a 16-bit one up to 32 MP.
+ * - **JPEG:** a baseline JPEG shrinks while it loads (8000 × 8000 4:4:4: 75 MiB peak), but a
+ *   progressive one cannot: libjpeg keeps every DCT coefficient of the image — 2 bytes per sample —
+ *   until the last scan. Its estimate is width × height × samples per pixel × 2, the samples from
+ *   its chroma subsampling (4:4:4 → 3, 4:2:2 → 2, 4:2:0 → 1.5). Measured: progressive 4:2:0 at
+ *   48 MP (8064 × 6048, a phone photo) 214 MiB and at 64 MP 258 MiB — both pass; 4:4:4 at 64 MP
+ *   (1.1 MB of file) 441 MiB — refused, 4:4:4 passes up to 32 MP. `sharp` 0.35 reports 4:2:2 as
+ *   4:2:0, so a progressive 4:2:2 file is counted at 1.5 samples: at 64 MP it passes and peaked at
+ *   319 MiB. Anything the estimate misses and that kills the worker is caught by the job's final
+ *   failure (`job_failed`), never retried.
+ * - **Notes:** computed from the header (width × height × channels × bytes per sample, or the
+ *   progressive JPEG estimate when larger), before any pixel is decoded.
  */
 export const UPLOAD_THUMBNAIL_MAX_DECODED_BYTES = UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS * 3;
 
@@ -59,6 +66,31 @@ const BYTES_PER_SAMPLE: Readonly<Record<string, number>> = {
 
 /** A depth `sharp` does not name above is counted at the widest sample, so it is never let through. */
 const UNKNOWN_BYTES_PER_SAMPLE = 16;
+
+/** Samples per pixel of a JPEG by its chroma subsampling (`sharp` metadata `chromaSubsampling`). */
+const JPEG_SAMPLES_PER_PIXEL: Readonly<Record<string, number>> = {
+  '4:4:4': 3,
+  '4:2:2': 2,
+  '4:2:0': 1.5,
+  '4:4:4:4': 4,
+};
+
+/** What a progressive JPEG's decoder holds per sample until its last scan: one 16-bit coefficient. */
+const PROGRESSIVE_JPEG_BYTES_PER_SAMPLE = 2;
+
+/**
+ * The bytes the decoder will hold for an image, from its header: width × height × channels ×
+ * bytes per sample, or — for a progressive JPEG — its coefficients when that is more.
+ */
+function estimateDecodedBytes(metadata: Metadata): number {
+  const pixels = (metadata.width ?? 0) * (metadata.height ?? 0);
+  const channels = metadata.channels ?? 0;
+  const decoded =
+    pixels * channels * (BYTES_PER_SAMPLE[metadata.depth ?? ''] ?? UNKNOWN_BYTES_PER_SAMPLE);
+  if (metadata.format !== 'jpeg' || metadata.isProgressive !== true) return decoded;
+  const samplesPerPixel = JPEG_SAMPLES_PER_PIXEL[metadata.chromaSubsampling ?? ''] ?? channels;
+  return Math.max(decoded, pixels * samplesPerPixel * PROGRESSIVE_JPEG_BYTES_PER_SAMPLE);
+}
 
 /**
  * How long one thumbnail may take to decode, resize and encode — a 64 MP interlaced PNG takes
@@ -89,8 +121,8 @@ export function buildThumbnailObjectKey(sourceKey: string): string {
  *
  * @remarks
  * - **Algorithm:** reads the header first (`metadata()`, which also applies the pixel cap) and
- *   refuses a source whose decoded size would pass {@link UPLOAD_THUMBNAIL_MAX_DECODED_BYTES};
- *   only then decodes, resizes and encodes.
+ *   refuses a source whose decoded size — for a progressive JPEG, its coefficients — would pass
+ *   {@link UPLOAD_THUMBNAIL_MAX_DECODED_BYTES}; only then decodes, resizes and encodes.
  * - **Failure modes:** throws `UploadThumbnailSourceError` when the bytes are no image `sharp`
  *   can decode (a corrupt or unsupported file, `failOn: 'error'` — warnings pass), when the image
  *   has more than {@link UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS} pixels or would decode to more than
@@ -105,12 +137,7 @@ export async function createImageThumbnail(image: Buffer): Promise<Buffer> {
     failOn: 'error',
   } as const;
   try {
-    const { width, height, channels, depth } = await sharp(image, decoderOptions).metadata();
-    const decodedBytes =
-      (width ?? 0) *
-      (height ?? 0) *
-      (channels ?? 0) *
-      (BYTES_PER_SAMPLE[depth ?? ''] ?? UNKNOWN_BYTES_PER_SAMPLE);
+    const decodedBytes = estimateDecodedBytes(await sharp(image, decoderOptions).metadata());
     if (decodedBytes > UPLOAD_THUMBNAIL_MAX_DECODED_BYTES) {
       throw new Error(
         `Input image would decode to ${decodedBytes} bytes, over the ${UPLOAD_THUMBNAIL_MAX_DECODED_BYTES}-byte budget`,

@@ -214,7 +214,7 @@ export function resolveJobMaxAttempts(job: Pick<Job, 'opts'>): number {
 /**
  * Returns true when the job has used its last retry (BullMQ `failed` event).
  */
-export function isFinalJobFailure(job: Job | undefined): boolean {
+export function isFinalJobFailure(job: Pick<Job, 'opts' | 'attemptsMade'> | undefined): boolean {
   if (!job) return false;
   const maxAttempts = resolveJobMaxAttempts(job);
   return job.attemptsMade >= maxAttempts;

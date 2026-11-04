@@ -1,7 +1,7 @@
 import { runOrganizationScopedWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import type { UploadService } from '@/domains/upload/upload.service.js';
-import type { UploadThumbnailSkipReason } from '@/domains/upload/upload.constants.js';
+import type { PatientImageThumbnailSkipReason } from '@/domains/app/sub-domains/patients/patient-images/patient-images.constants.js';
 import { createWorkerPatientImageThumbnailRepository } from '@/domains/app/sub-domains/patients/patient-images/patient-image-thumbnail.repository.js';
 
 /**
@@ -29,7 +29,7 @@ export type PatientImageThumbnailOutcome =
   | { outcome: 'removed'; thumbnailKey: string }
   | {
       outcome: 'skipped';
-      reason: 'row_gone' | 'in_sync' | UploadThumbnailSkipReason;
+      reason: 'row_gone' | 'in_sync' | PatientImageThumbnailSkipReason;
     };
 
 /**
@@ -48,6 +48,9 @@ export type PatientImageThumbnailOutcome =
  *   is a skip (completed, warn log for the last three) — the photo keeps its full-size fallback,
  *   and for the last three the job records the reason (`thumbnail_skip_reason`, a compare-and-set)
  *   so the sweep stops re-queuing it; a later run that makes the thumbnail (a restore) clears it.
+ *   A photo already marked `job_failed` (its job crashed the worker, see
+ *   {@link markPatientImageThumbnailJobFailed}) is skipped without touching storage, so a job
+ *   queued behind the crashed one does not crash it again.
  *   A storage or database error propagates, so BullMQ retries it (the queue pauses on an S3
  *   outage).
  * - **Side effects:** at most one GET + PUT or one DELETE on the object store; one row update.
@@ -78,6 +81,10 @@ export async function syncPatientImageThumbnail({
   if (row === null) return { outcome: 'skipped', reason: 'row_gone' };
 
   if (row.deletedAt === null && row.thumbnailKey === null) {
+    // A job that failed for good (a crash) is not handed the file again — not even one queued
+    // behind it
+    if (row.thumbnailSkipReason === 'job_failed')
+      return { outcome: 'skipped', reason: 'job_failed' };
     const result = await storage.createThumbnail({ organizationPublicId, fileKey: row.fileKey });
     if (result.kind === 'skipped') {
       logger.warn(
@@ -105,4 +112,49 @@ export async function syncPatientImageThumbnail({
   }
 
   return { outcome: 'skipped', reason: 'in_sync' };
+}
+
+/**
+ * Records that a photo's thumbnail job failed for good (`thumbnail_skip_reason = 'job_failed'`), so
+ * the sweep and the backfill stop handing it to the worker again.
+ *
+ * @remarks
+ * - **Algorithm:** in the job's organization context, reads the photo and, when it is still live
+ *   without a thumbnail, records the reason (the compare-and-set of
+ *   `PatientImageThumbnailRepository.markThumbnailSkipped`). A deleted photo or one that has a
+ *   thumbnail is left alone — its removal is cheap and the sweep may retry it.
+ * - **Failure modes:** a database error propagates to the caller (the worker's `failed` listener
+ *   logs it); a photo that is gone answers `false`.
+ * - **Side effects:** at most one row update; a warn log `patient-image-thumbnail.job_failed`.
+ * - **Notes:** the worker calls it from BullMQ's `failed` event on a final failure — a job that
+ *   stalled past `maxStalledCount` (BullMQ fails it with "job stalled more than allowable limit"
+ *   the next time a worker takes it, without running it) or one that used every attempt — the case
+ *   where the processor never got to record anything, an out-of-memory kill mid-decode included.
+ */
+export async function markPatientImageThumbnailJobFailed({
+  organizationPublicId,
+  patientImagePublicId,
+}: {
+  organizationPublicId: string;
+  patientImagePublicId: string;
+}): Promise<boolean> {
+  const marked = await runOrganizationScopedWorkerJob({
+    job: { organizationPublicId },
+    processor: async (databaseHandle) => {
+      const repository = createWorkerPatientImageThumbnailRepository(databaseHandle);
+      const row = await repository.findByPublicId({
+        publicId: patientImagePublicId,
+        organizationPublicId,
+      });
+      if (row === null || row.deletedAt !== null || row.thumbnailKey !== null) return false;
+      return repository.markThumbnailSkipped({ id: row.id, reason: 'job_failed' });
+    },
+  });
+  if (marked) {
+    logger.warn(
+      { organizationPublicId, patientImagePublicId },
+      'patient-image-thumbnail.job_failed',
+    );
+  }
+  return marked;
 }

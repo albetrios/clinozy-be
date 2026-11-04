@@ -62,9 +62,14 @@ A private photo also needs `patient:private_album:read` on every route (P23).
   domain cannot use — outside the opted-in prefixes, its file gone, or bytes it refuses (corrupt,
   over 64 MP or 192 MB decoded, past 30 s) — keeps its full-size fallback, and the job records why
   (`thumbnail_skip_reason`); the sweep and the backfill pass such a photo by, so it is not decoded
-  again every 15 minutes. Every reason is final, a timeout included (30 s is about 25 times a
-  64 MP decode on one thread). A later run that makes the thumbnail (a restore) clears the reason;
-  to retry a photo by hand, clear its `thumbnail_skip_reason` and run the backfill. A thumbnail and
+  again every 15 minutes. So does a photo whose job failed for good — it stalled past BullMQ's
+  limit (the worker died under it, an out-of-memory kill included) or used every attempt: the
+  worker's `failed` listener records `job_failed` in the job's organization context
+  (`recordPatientImageThumbnailFinalFailure`), so no crash loops through the sweep. Every reason is
+  final, a timeout included (30 s is about 25 times a 64 MP decode on one thread). A later run that
+  makes the thumbnail (a restore) clears the reason — except after `job_failed`, which no job
+  decodes again (one queued behind the crashed job is skipped too). To retry a photo by hand,
+  clear its `thumbnail_skip_reason` and run the backfill. A thumbnail and
   a reason never stand together (`chk_patient_images_thumbnail_or_skip`).
 - **Pairing (WC-43):** a session's `before` and `after` photos of one body part pair on
   `patient_treatment_id`, `stage` and `body_part` (P24) — read, not computed.

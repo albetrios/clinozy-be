@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, gte, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { assertWorkerDatabaseContext } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
-import type { UploadThumbnailSkipReason } from '@/domains/upload/upload.constants.js';
+import type { PatientImageThumbnailSkipReason } from './patient-images.constants.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { patient_images } from './patient-images.schema.js';
 
@@ -10,6 +10,8 @@ export interface PatientImageThumbnailRow {
   id: number;
   fileKey: string;
   thumbnailKey: string | null;
+  /** Why an earlier run made none (`thumbnail_skip_reason`), or null. */
+  thumbnailSkipReason: string | null;
   deletedAt: Date | null;
 }
 
@@ -52,6 +54,7 @@ export class PatientImageThumbnailRepository {
         id: patient_images.id,
         fileKey: patient_images.file_key,
         thumbnailKey: patient_images.thumbnail_key,
+        thumbnailSkipReason: patient_images.thumbnail_skip_reason,
         deletedAt: patient_images.deleted_at,
       })
       .from(patient_images)
@@ -110,7 +113,7 @@ export class PatientImageThumbnailRepository {
     reason,
   }: {
     id: number;
-    reason: UploadThumbnailSkipReason;
+    reason: PatientImageThumbnailSkipReason;
   }): Promise<boolean> {
     const rows = await this.databaseHandle
       .update(patient_images)

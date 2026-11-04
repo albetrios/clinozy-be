@@ -42,3 +42,53 @@ export function oversizedPngHeader({
     pngChunk({ type: 'IEND', data: Buffer.alloc(0) }),
   ]);
 }
+
+/** One JPEG marker segment: `FF <marker>`, its length, then the payload. */
+function jpegSegment({ marker, payload }: { marker: number; payload: Buffer }): Buffer {
+  const head = Buffer.alloc(4);
+  head[0] = 0xff;
+  head[1] = marker;
+  head.writeUInt16BE(payload.length + 2, 2);
+  return Buffer.concat([head, payload]);
+}
+
+/**
+ * The header of a YCbCr JPEG that claims `width` × `height` pixels and carries no scan data — a
+ * quantization table, the frame (`progressive` → SOF2, else SOF0) with the luma sampling of
+ * `chromaSubsampling`, and an empty scan — for tests of a decoder's decoded-size estimate.
+ *
+ * @remarks
+ * - **Notes:** `sharp` reads the format, the progressive flag and the subsampling from it; a
+ *   decode finds no image data.
+ */
+export function oversizedJpegHeader({
+  width,
+  height,
+  progressive,
+  chromaSubsampling,
+}: {
+  width: number;
+  height: number;
+  progressive: boolean;
+  chromaSubsampling: '4:4:4' | '4:2:0';
+}): Buffer {
+  const luma = chromaSubsampling === '4:2:0' ? 0x22 : 0x11;
+  const frame = Buffer.from([
+    8,
+    height >> 8,
+    height & 0xff,
+    width >> 8,
+    width & 0xff,
+    3,
+    ...[1, luma, 0],
+    ...[2, 0x11, 0],
+    ...[3, 0x11, 0],
+  ]);
+  return Buffer.concat([
+    Buffer.from([0xff, 0xd8]),
+    jpegSegment({ marker: 0xdb, payload: Buffer.concat([Buffer.from([0]), Buffer.alloc(64, 1)]) }),
+    jpegSegment({ marker: progressive ? 0xc2 : 0xc0, payload: frame }),
+    jpegSegment({ marker: 0xda, payload: Buffer.from([3, 1, 0, 2, 0, 3, 0, 0, 0, 0]) }),
+    Buffer.from([0xff, 0xd9]),
+  ]);
+}

@@ -735,6 +735,7 @@ src/
     │   │   │   │   │   │   ├── patient-image-thumbnail-reconcile.processor.unit.test.ts
     │   │   │   │   │   │   ├── patient-image-thumbnail.processor.unit.test.ts
     │   │   │   │   │   │   ├── patient-image-thumbnail.queue.unit.test.ts
+    │   │   │   │   │   │   ├── patient-image-thumbnail.worker.unit.test.ts
     │   │   │   │   │   │   └── patient-images.service.unit.test.ts
     │   │   │   │   ├── queues/
     │   │   │   │   │   ├── patient-image-thumbnail.job.schema.ts

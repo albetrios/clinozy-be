@@ -1,4 +1,5 @@
 import { RECORD_SHORT_TEXT_MAX } from '@/shared/constants/record-fields.constants.js';
+import { UPLOAD_THUMBNAIL_SKIP_REASON_VALUES } from '@/domains/upload/upload.constants.js';
 /** A photo's album (P23): `private` is for `patient:private_album:read` holders only. */
 export const PATIENT_IMAGE_ALBUM = {
   GENERAL: 'general',
@@ -24,3 +25,19 @@ export const PATIENT_IMAGE_MAX_BYTES = 15 * 1024 * 1024;
 
 /** The longest file name kept from the upload. */
 export const PATIENT_IMAGE_FILE_NAME_MAX = RECORD_SHORT_TEXT_MAX;
+
+/**
+ * Why a photo has no thumbnail and the sweep should not ask again
+ * (`patient_images.thumbnail_skip_reason`): the upload domain's final skips
+ * (`UPLOAD_THUMBNAIL_SKIP_REASON_VALUES`), or `job_failed` — the photo's job failed for good: it
+ * stalled past BullMQ's limit (the worker died under it, an out-of-memory kill included) or used
+ * every attempt.
+ */
+export const PATIENT_IMAGE_THUMBNAIL_SKIP_REASON_VALUES = [
+  ...UPLOAD_THUMBNAIL_SKIP_REASON_VALUES,
+  'job_failed',
+] as const;
+
+/** One of {@link PATIENT_IMAGE_THUMBNAIL_SKIP_REASON_VALUES}. */
+export type PatientImageThumbnailSkipReason =
+  (typeof PATIENT_IMAGE_THUMBNAIL_SKIP_REASON_VALUES)[number];
