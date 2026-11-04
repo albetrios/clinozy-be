@@ -77,9 +77,9 @@ therefore bounds every migration:
 | Transactional (default) | 5 s (`SET LOCAL`) | 5 min (`SET LOCAL`) | the file rolls back and is retried, 3 attempts in all, 3 s apart |
 | Non-transactional (`CREATE INDEX CONCURRENTLY`) | 5 s (session) | none — long index builds block no writes | the run fails; drop the INVALID index and re-run |
 
-A migration that genuinely needs longer than 5 minutes inside its transaction is a data change in
-disguise (migrations carry no backfills) or a table rewrite the lint should have caught — split it, or
-move the long part to the non-transactional lane. Pinned by `migration-lock-timeout.unit.test.ts` and,
+A migration that genuinely needs longer than 5 minutes inside its transaction is a backfill too big
+for one transaction or a table rewrite the lint should have caught — split it, or move the long part to
+the non-transactional lane. Pinned by `migration-lock-timeout.unit.test.ts` and,
 against a real held lock, `migration-lock-timeout.db.unit.test.ts`.
 
 ## Non-transactional migrations (`CREATE INDEX CONCURRENTLY`)
@@ -111,15 +111,66 @@ Rules and guardrails (enforced by `pnpm db:migrate:lint`):
 
 These tables are **plain (non-partitioned)** tables. Growth is bounded by row-level retention workers (`audit-retention`, `notification-retention`) that batch-`DELETE` rows older than the configured window — there is no partition lifecycle to maintain. New indexes on these tables follow the same rules as any other high-write table: prefer `CREATE INDEX CONCURRENTLY` in a non-transactional migration. The composite keyset indexes added in [`20260520000006_keyset_pagination_indexes.sql`](../../../migrations/20260520000006_keyset_pagination_indexes.sql) were created with a plain `CREATE INDEX` only because the baseline seeds those tables empty (instant build, before any live traffic).
 
-### Before the first release
+### Since the first release
 
-Nothing is deployed yet, so no database holds data a migration must protect. A migration never
-carries a backfill, a data fix or a rename of old values: a new column is `NOT NULL` from the
-start, and an allowed value is stated in its final form where the table is created. The runner
-records each applied file by name, so editing an existing file changes fresh databases only — a
-rewrite is proven by migrating a fresh database before and after and diffing
-`pg_dump --schema-only`. Expand / contract and "never edit merged migrations" bind once a release
-ships.
+Production has held data since v9.4.1 (2026-10-25). A migration protects it:
+
+- **Never edit a merged migration** — development applies every merged file, and the runner records each
+  applied file by name, so an edit reaches fresh databases only and the environments drift. Fix forward
+  with a new file (`be-db-migration-maintainer-sync.mdc`: "Applied migrations are immutable").
+- **A new column carries its data.** Add it nullable (or with a default), fill the existing rows in the
+  same migration, then constrain it (`NOT VALID` + `VALIDATE`, then `SET NOT NULL`). A column that a
+  read path depends on is filled before that read ships — `20261101090000_upload_record_binding.sql`
+  shipped without its fill and cost every existing attachment its view link until
+  `20261104043912_upload_record_binding_backfill.sql`.
+- **A fill runs as data, not as the migrator.** The migrator is RLS-subject, so the statement that reads
+  or writes a FORCE RLS table sits between `ALTER TABLE … NO FORCE ROW LEVEL SECURITY` and `FORCE ROW
+  LEVEL SECURITY` in a transactional file (lint rule `force_rls_data_migration_without_owner_bracket`;
+  models: `20261030103639_leads_closed_at.sql`, `20261104043912_upload_record_binding_backfill.sql`).
+  `NO FORCE` takes ACCESS EXCLUSIVE until commit, so keep the fill to one statement per table.
+- **Every constraint a release adds must still accept what the previous release writes** — see expand /
+  contract below.
+
+### Previous-release write compatibility (expand phase of the v9.4.1 → next release)
+
+Four migrations of the release after v9.4.1 refuse writes v9.4.1 still makes, and one leaves the records it
+writes without the upload binding the new release reads. v9.4.1 keeps writing while the migrations apply
+and the containers swap, and again after a rollback, so
+[`20261104043911_previous_release_write_compatibility.sql`](../../../migrations/20261104043911_previous_release_write_compatibility.sql)
+completes each such write in the new shape. Every trigger fires only on a shape the new release never
+writes; a raw write that breaks a rule on purpose is still refused.
+
+| Trigger (`app.`) | Fills | For the constraint of |
+| ---------------- | ----- | --------------------- |
+| `trg_<record>_bind_upload_keys_for_previous_release` on `patient_images`, `patient_reports`, `patient_reviews`, `contact_activities`, `payments` | binds the record's confirmed, unbound keys to it | `20261101090000_upload_record_binding` (read links) |
+| `trg_leads_closed_at_for_previous_release` | `closed_at` on a status change into / out of a closing status | `chk_leads_closed_at` |
+| `trg_medical_purchase_order_items_fill_for_previous_release` | a new line's GST (its medicine's rate, inclusive) and its order's split; received = ordered on a line marked received | `NOT NULL` GST columns, `chk_medical_purchase_order_items_amount`, `chk_medical_purchase_order_items_received` |
+| `trg_medical_purchase_orders_split_for_previous_release` | `taxable_total` / `gst_total` when only `total` was written | `chk_medical_purchase_orders_totals` |
+| `trg_contacts_date_of_birth_for_previous_release` | `date_of_birth_is_approximate = false` when the date is cleared | `chk_contacts_date_of_birth_approximate` |
+
+Tests: `src/domains/app/__tests__/integration/app-previous-release-writes.integration.test.ts` (each
+v9.4.1 write, replayed) and `app-upload-binding.integration.test.ts` (binding on the old write, and the
+backfill). **Contract (follow-up):** once the new release is live and a rollback to v9.4.1 is ruled out,
+one migration drops the nine triggers and the five `app.fn_*_for_previous_release()` functions, and the
+previous-release suite goes with it.
+
+### Long-held locks in the release after v9.4.1
+
+`20261101100000_user_erasure_attribution_set_null.sql` (109 foreign keys re-added) and
+`20261101101100_tenant_composite_foreign_keys.sql` (33) each drop and re-add their foreign keys and
+`VALIDATE` them in one transaction. `DROP CONSTRAINT` on a foreign key takes ACCESS EXCLUSIVE on the child
+and on the referenced table — `auth.users` among them, from the first statement — and holds it until
+commit, so sign-in and every query on those tables wait for the whole file (the "no long lock" in the
+first file's header is wrong; the file is applied, so it stays as written).
+
+Measured locally (Postgres 17, warm cache), re-running each file's work in one transaction: 0.80 s and
+0.27 s on the `seed:full` data set, 0.84 s and 0.30 s after `BULK_PROFILE=load pnpm db:seed:bulk` (709 k
+rows; the tables these files validate stay small there), and one foreign-key `VALIDATE` over 395 k rows
+took 45 ms. At production's size the hold is about a second; the larger risk is the wait for each lock:
+a long-running transaction on any of the 64 tables they validate, or a table they reference, makes the file wait up to the 5 s `lock_timeout`
+while it already holds `auth.users`, up to three attempts. Deploy these two files off-peak, with no long
+transaction open (`SELECT pid, now() - xact_start, state, query FROM pg_stat_activity WHERE xact_start <
+now() - interval '5 seconds'`), and expect sign-in to pause for a few seconds at worst.
 
 ### Expand / contract (keep deploys backward-compatible)
 
