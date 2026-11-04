@@ -10,7 +10,7 @@ export interface RunJob {
 
 /** A commit status body (GitHub REST `POST /repos/{owner}/{repo}/statuses/{sha}`). */
 export interface CommitStatus {
-  readonly state: 'failure';
+  readonly state: 'failure' | 'success';
   readonly context: string;
   readonly description: string;
   readonly target_url: string;
@@ -30,3 +30,21 @@ export function lanesFinished(jobs: readonly RunJob[]): boolean;
 
 /** The commit status the alert posts for a failed lane. */
 export function alertStatus(lane: RunJob): CommitStatus;
+
+/** One entry of a commit's combined status (GitHub REST `GET .../commits/{ref}/status`). */
+export interface ContextStatus {
+  readonly context: string;
+  readonly state: string;
+}
+
+/** Whether the head commit's alert is red (the combined status lists each context's latest). */
+export function alertIsRed(statuses: readonly ContextStatus[]): boolean;
+
+/** The run a cleared alert names: its attempt number and its URL. */
+export interface ClearingRun {
+  readonly runAttempt: string;
+  readonly runUrl: string;
+}
+
+/** The commit status that turns a stale alert green once every lane of a later attempt passed. */
+export function clearedStatus(run: ClearingRun): CommitStatus;
