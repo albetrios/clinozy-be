@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.5.0](https://github.com/albetrios/clinozy-be/compare/v9.4.1...v9.5.0) (2026-11-04)
+
+
+### Added
+
+* **app:** patient photo grids load a 320 px thumbnail made in the background ([#186](https://github.com/albetrios/clinozy-be/issues/186)) ([3bfcb39](https://github.com/albetrios/clinozy-be/commit/3bfcb39544f2426015da0400c32b285526679f4f))
+* **billing:** a bill line carries an optional description ([#183](https://github.com/albetrios/clinozy-be/issues/183)) ([00c350a](https://github.com/albetrios/clinozy-be/commit/00c350a1b961ca2fa03b214ac2388f71764ba123))
+* **contacts:** register a contact by age — approximate birth date, age on every answer, age filters ([#185](https://github.com/albetrios/clinozy-be/issues/185)) ([22641d9](https://github.com/albetrios/clinozy-be/commit/22641d9e6c6a884eebcfe9f5b0bc82a5de6fff96))
+* **leads:** a lead follows its bookings — Booked, walk-ins, win-back ([#181](https://github.com/albetrios/clinozy-be/issues/181)) ([b5dd42b](https://github.com/albetrios/clinozy-be/commit/b5dd42b0e740756caead7c47ec659af756abae94))
+* **medical:** pharmacy records keep HSN, pack, loose units, batch MRP, supplier contact and order notes ([#182](https://github.com/albetrios/clinozy-be/issues/182)) ([0470857](https://github.com/albetrios/clinozy-be/commit/0470857887d9f87a67d214042246ef8a7273d2f5))
+* **medical:** purchase lines carry GST and a monthly purchase GST summary ([#187](https://github.com/albetrios/clinozy-be/issues/187)) ([791352c](https://github.com/albetrios/clinozy-be/commit/791352ccf4e30274484fd6c08249b125e40ebb07))
+* **medical:** short deliveries — received quantities per purchase line ([#189](https://github.com/albetrios/clinozy-be/issues/189)) ([868b9e8](https://github.com/albetrios/clinozy-be/commit/868b9e8e8de4560abab13305a0a9fb1d6c19497d))
+
+
+### Fixed
+
+* **ci:** the API smoke sweep expects 400 from the GST summary reads without a month ([#191](https://github.com/albetrios/clinozy-be/issues/191)) ([1a1f7d8](https://github.com/albetrios/clinozy-be/commit/1a1f7d8077e5b86c3d237d1c1325dd9f270ee06a)), closes [#188](https://github.com/albetrios/clinozy-be/issues/188)
+* **ci:** the GHCR cleanup addresses the organization's &lt;repository&gt;/&lt;image&gt; packages ([#174](https://github.com/albetrios/clinozy-be/issues/174)) ([c3edfa5](https://github.com/albetrios/clinozy-be/commit/c3edfa509cbef3fef6ff058524326dbf6e002e1d))
+* **ci:** the GHCR cleanup keeps the signature of every image it keeps ([#175](https://github.com/albetrios/clinozy-be/issues/175)) ([7cc4c40](https://github.com/albetrios/clinozy-be/commit/7cc4c4083e14c73878eb1c815bf5599fae103bc2))
+* **ci:** the restore drills log in as the roles production uses, never Neon's owner ([#177](https://github.com/albetrios/clinozy-be/issues/177)) ([93f2be3](https://github.com/albetrios/clinozy-be/commit/93f2be34e9b352e1cbf830832931aa3db0277013))
+* **ci:** the restore smoke configures mail with the CI fixture key, so send-code answers 200 ([#179](https://github.com/albetrios/clinozy-be/issues/179)) ([f5d0f6d](https://github.com/albetrios/clinozy-be/commit/f5d0f6df5b055b0b3325ba6eee0849be0bf5c341))
+* **deps:** lift qs to the 6.16.1 floor and take the npm-non-major group ([#170](https://github.com/albetrios/clinozy-be/issues/170)) ([f0975e7](https://github.com/albetrios/clinozy-be/commit/f0975e70224c30aef0ee00c7c33e0ab5f7862223))
+* **deps:** lift re2js to 2.8.7 under markdownlint (GHSA-gg6h-894w-4m9c) ([#201](https://github.com/albetrios/clinozy-be/issues/201)) ([f059c9c](https://github.com/albetrios/clinozy-be/commit/f059c9cf8f0b24d0cfa43d8ae3c3dff774b45607))
+* **migrations:** existing attachments keep their links, and v9.4.1 writes pass through the release ([#202](https://github.com/albetrios/clinozy-be/issues/202)) ([fe9622e](https://github.com/albetrios/clinozy-be/commit/fe9622e24a1667a1ce7c994aa38f653c1f7c03d0))
+* **security:** close the backend findings of the 2026-10-31 security triage ([#190](https://github.com/albetrios/clinozy-be/issues/190)) ([0c0e92c](https://github.com/albetrios/clinozy-be/commit/0c0e92cd07607ff6d9a66e7648ffa8875d867e26))
+* **thumbnails:** bound the image decoder, and a photo the job cannot use stops being re-queued ([#203](https://github.com/albetrios/clinozy-be/issues/203)) ([f4f6611](https://github.com/albetrios/clinozy-be/commit/f4f6611a277bbffcaa4c17deac840d99384b4c41))
+
+
+### Documentation
+
+* name no dead path in the babysit note ([#169](https://github.com/albetrios/clinozy-be/issues/169)) ([f7aa3a0](https://github.com/albetrios/clinozy-be/commit/f7aa3a0b2515509cfdfc93f85cbc709f08f4e63e))
+
 ## [9.4.1](https://github.com/albetrios/clinozy-be/compare/v9.4.0...v9.4.1) (2026-10-25)
 
 
