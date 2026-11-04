@@ -30,6 +30,7 @@ src/
     │   │   │   ├── app-automation.integration.test.ts
     │   │   │   ├── app-branch-access.integration.test.ts
     │   │   │   ├── app-exports.integration.test.ts
+    │   │   │   ├── app-previous-release-writes.integration.test.ts
     │   │   │   ├── app-races.integration.test.ts
     │   │   │   ├── app-read-only-mode.integration.test.ts
     │   │   │   ├── app-record-access.integration.test.ts
