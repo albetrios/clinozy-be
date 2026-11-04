@@ -18,6 +18,31 @@ import { PROVISIONAL_FACTOR_PERIOD_SECONDS } from '@/shared/constants/security.c
 import { and, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 
+/** Codes each TOTP secret has already spent in this file — the server refuses a replayed code. */
+const spentTotpCodesBySecret = new Map<string, Set<string>>();
+
+/**
+ * A TOTP code the server accepts now (its ±1 window of 30 s steps) that this secret has not spent.
+ *
+ * @remarks Consumed codes are replay-protected, and a 30 s boundary can pass mid-test, so a fixed
+ * offset from "now" can land on a code an earlier request spent. The current window is tried
+ * first, then the next (safe if a boundary passes before the request lands), then the previous.
+ */
+async function unspentTotpCode(secret: string): Promise<string> {
+  const spentCodes = spentTotpCodesBySecret.get(secret) ?? new Set<string>();
+  spentTotpCodesBySecret.set(secret, spentCodes);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  for (const offsetSeconds of [0, 30, -30]) {
+    // otplib `epoch` is in SECONDS.
+    const candidate = await generateTotpCode({ secret, epoch: nowSeconds + offsetSeconds });
+    if (!spentCodes.has(candidate)) {
+      spentCodes.add(candidate);
+      return candidate;
+    }
+  }
+  throw new Error('Every TOTP code in the accepted window is already spent');
+}
+
 describe('MFA Sub-Domain — Integration', () => {
   let app: FastifyInstance;
 
@@ -301,7 +326,7 @@ describe('MFA Sub-Domain — Integration', () => {
       const { secret } = (enroll.json() as { data: { secret: string } }).data;
       expect(secret).toBeTypeOf('string');
 
-      const enrollmentCode = await generateTotpCode({ secret });
+      const enrollmentCode = await unspentTotpCode(secret);
       const confirm = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/auth/me/mfa/enroll/confirm'),
@@ -327,16 +352,12 @@ describe('MFA Sub-Domain — Integration', () => {
       });
       expect(verifyReplay.statusCode, verifyReplay.body).toBe(401);
 
-      // Authenticated step-up verification. Consumed codes are replay-protected
-      // within their window, so use the NEXT 30s window (server tolerance ±1 step).
+      // Authenticated step-up verification with a code the enrollment did not spend.
       const verify = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/auth/me/mfa/verify'),
         token,
-        payload: {
-          // otplib `epoch` is in SECONDS; +30s = next TOTP window (server tolerance ±1 step).
-          code: await generateTotpCode({ secret, epoch: Math.floor(Date.now() / 1000) + 30 }),
-        },
+        payload: { code: await unspentTotpCode(secret) },
       });
       expect(verify.statusCode, verify.body).toBe(200);
 
@@ -359,8 +380,7 @@ describe('MFA Sub-Domain — Integration', () => {
         url: testApiPath('/auth/mfa/login'),
         payload: {
           mfa_session_token: loginBody.mfa_session_token,
-          // Previous 30s window (epoch in seconds) — distinct from the codes consumed above.
-          totp_code: await generateTotpCode({ secret, epoch: Math.floor(Date.now() / 1000) - 30 }),
+          totp_code: await unspentTotpCode(secret),
         },
       });
       expect(mfaLogin.statusCode, mfaLogin.body).toBe(200);
@@ -376,11 +396,6 @@ describe('MFA Sub-Domain — Integration', () => {
    * credentials. The owner is emailed about the enrollment.
    */
   describe('a factor enrolled under an email-code window is provisional (A-1)', () => {
-    /** TOTP code of the 30 s window `offsetSeconds` from now (server tolerance is ±1 window). */
-    function totpCodeAt({ secret, offsetSeconds }: { secret: string; offsetSeconds: number }) {
-      return generateTotpCode({ secret, epoch: Math.floor(Date.now() / 1000) + offsetSeconds });
-    }
-
     /** Enrolls a TOTP factor for a passwordless user on a session stepped up by email code. */
     async function enrollUnderEmailCodeWindow() {
       const user = await createTestUser({ isEmailVerified: true });
@@ -400,7 +415,7 @@ describe('MFA Sub-Domain — Integration', () => {
         method: 'POST',
         url: testApiPath('/auth/me/mfa/enroll/confirm'),
         token,
-        payload: { code: await totpCodeAt({ secret, offsetSeconds: 0 }) },
+        payload: { code: await unspentTotpCode(secret) },
       });
       expect(confirm.statusCode, confirm.body).toBe(200);
       return { user, token, sessionPublicId, secret };
@@ -458,12 +473,12 @@ describe('MFA Sub-Domain — Integration', () => {
     it('never counts as strong on the session that enrolled it, even after the period', async () => {
       const { user, token, secret } = await enrollUnderEmailCodeWindow();
 
-      await stepUpWithTotp({ token, code: await totpCodeAt({ secret, offsetSeconds: 30 }) });
+      await stepUpWithTotp({ token, code: await unspentTotpCode(secret) });
       const whileProvisional = await signOutEverywhereElse(token);
       expect(whileProvisional.statusCode, whileProvisional.body).toBe(403);
 
       await endProvisionalPeriod(user.id);
-      await stepUpWithTotp({ token, code: await totpCodeAt({ secret, offsetSeconds: -30 }) });
+      await stepUpWithTotp({ token, code: await unspentTotpCode(secret) });
       const afterPeriod = await signOutEverywhereElse(token);
       expect(afterPeriod.statusCode, afterPeriod.body).toBe(403);
     });
@@ -474,7 +489,7 @@ describe('MFA Sub-Domain — Integration', () => {
 
       await stepUpWithTotp({
         token: otherToken,
-        code: await totpCodeAt({ secret, offsetSeconds: 30 }),
+        code: await unspentTotpCode(secret),
       });
       const whileProvisional = await signOutEverywhereElse(otherToken);
       expect(whileProvisional.statusCode, whileProvisional.body).toBe(403);
@@ -482,7 +497,7 @@ describe('MFA Sub-Domain — Integration', () => {
       await endProvisionalPeriod(user.id);
       await stepUpWithTotp({
         token: otherToken,
-        code: await totpCodeAt({ secret, offsetSeconds: -30 }),
+        code: await unspentTotpCode(secret),
       });
       const afterPeriod = await signOutEverywhereElse(otherToken);
       expect(afterPeriod.statusCode, afterPeriod.body).toBe(204);
@@ -515,11 +530,11 @@ describe('MFA Sub-Domain — Integration', () => {
         method: 'POST',
         url: testApiPath('/auth/me/mfa/enroll/confirm'),
         token,
-        payload: { code: await totpCodeAt({ secret, offsetSeconds: 0 }) },
+        payload: { code: await unspentTotpCode(secret) },
       });
       expect(confirm.statusCode, confirm.body).toBe(200);
 
-      await stepUpWithTotp({ token, code: await totpCodeAt({ secret, offsetSeconds: 30 }) });
+      await stepUpWithTotp({ token, code: await unspentTotpCode(secret) });
       const signedOut = await signOutEverywhereElse(token);
       expect(signedOut.statusCode, signedOut.body).toBe(204);
     });
