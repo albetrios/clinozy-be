@@ -180,4 +180,56 @@ describe('Patient image thumbnails — integration', () => {
     await expect(runJob()).resolves.toEqual({ outcome: 'created', thumbnailKey });
     expect(await storedThumbnailKey()).toBe(thumbnailKey);
   });
+
+  it('5. a photo the job cannot use records why, and the sweep and the backfill stop asking', async () => {
+    const brokenKey = `organization-files/${fixture.organization.publicId}/${lastName}-broken.jpg`;
+    await operatorQuery`
+      INSERT INTO upload.uploads (public_id, user_id, organization_id, file_name, file_key, mime_type,
+        file_size, bucket, status, uploaded_at)
+      VALUES (${generatePublicId('upload')}, ${fixture.members.owner.userId}, ${fixture.organization.id},
+        'broken.jpg', ${brokenKey}, 'image/jpeg', 4096, 'local', 'UPLOADED', now())
+    `;
+    await flow.expect(200, 'a second photo', 'POST', images, { file_key: brokenKey });
+    const broken = flow.last('.data.id');
+    // Past the sweep's 10-minute grace, inside its week
+    await operatorQuery`
+      UPDATE app.patient_images SET created_at = now() - interval '1 hour', updated_at = now()
+      WHERE public_id = ${broken}
+    `;
+    expect(await sweepCandidates(), 'before its job: a lost enqueue to re-add').toContain(broken);
+
+    const runBrokenJob = () =>
+      syncPatientImageThumbnail({
+        organizationPublicId: fixture.organization.publicId,
+        patientImagePublicId: broken,
+        storage,
+      });
+    storage.createThumbnail.mockResolvedValueOnce({
+      kind: 'skipped',
+      reason: 'source_unusable',
+    } as never);
+    await expect(runBrokenJob()).resolves.toEqual({
+      outcome: 'skipped',
+      reason: 'source_unusable',
+    });
+    const [marked] = await operatorQuery<
+      { thumbnail_key: string | null; thumbnail_skip_reason: string | null }[]
+    >`SELECT thumbnail_key, thumbnail_skip_reason FROM app.patient_images WHERE public_id = ${broken}`;
+    expect(marked).toEqual({ thumbnail_key: null, thumbnail_skip_reason: 'source_unusable' });
+    expect(await sweepCandidates(), 'the sweep passes it by').not.toContain(broken);
+    expect((await backfillCandidates()).photos, 'so does the backfill').not.toContain(broken);
+    await flow.expect(200, 'it still opens', 'GET', `${images}/${broken}`);
+    flow.expectValue('on its full-size fallback', '.data.thumbnail_url == .data.file_url', true);
+
+    // A later run that makes it (a restore re-enqueues) clears the reason
+    await expect(runBrokenJob()).resolves.toMatchObject({ outcome: 'created' });
+    const [made] = await operatorQuery<{ thumbnail_skip_reason: string | null }[]>`
+      SELECT thumbnail_skip_reason FROM app.patient_images WHERE public_id = ${broken}
+    `;
+    expect(made?.thumbnail_skip_reason).toBeNull();
+    await expect(
+      operatorQuery`UPDATE app.patient_images SET thumbnail_skip_reason = 'source_missing' WHERE public_id = ${broken}`,
+      'a thumbnail and a skip reason never stand together',
+    ).rejects.toThrow(/chk_patient_images_thumbnail_or_skip/);
+  });
 });

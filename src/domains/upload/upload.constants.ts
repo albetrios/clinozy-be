@@ -149,6 +149,27 @@ export const UPLOAD_DTO_FILE_SIZE_MAX_BYTES = 10 * 1024 * 1024;
 export { PRESIGNED_URL_EXPIRY_SECONDS } from '@/shared/constants/ttl.constants.js';
 
 /**
+ * Why `UploadService.createThumbnail` made no thumbnail — each final for the stored file: a
+ * key outside the opted-in prefixes (`not_opted_in`), a stored file that is gone (`source_missing`),
+ * or bytes the decoder will not read — a type not opted in, a corrupt file, more pixels than
+ * `UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS`, or a decode past `UPLOAD_THUMBNAIL_TIMEOUT_SECONDS`
+ * (`source_unusable`).
+ *
+ * @remarks
+ * - **Notes:** a record that keeps a thumbnail stores the reason so its sweep stops asking again
+ *   (`app.patient_images.thumbnail_skip_reason`, `chk_patient_images_thumbnail_skip_reason`). Kept
+ *   free of `sharp` so schema modules can import it.
+ */
+export const UPLOAD_THUMBNAIL_SKIP_REASON_VALUES = [
+  'not_opted_in',
+  'source_missing',
+  'source_unusable',
+] as const;
+
+/** One of {@link UPLOAD_THUMBNAIL_SKIP_REASON_VALUES}. */
+export type UploadThumbnailSkipReason = (typeof UPLOAD_THUMBNAIL_SKIP_REASON_VALUES)[number];
+
+/**
  * Key-prefix namespace for the object a client uploads to via its presigned URL. On confirmation
  * the verified/sanitized bytes are published to the prefix-stripped final key (which the client
  * never holds a presigned URL for), so the served object cannot be overwritten through the still-

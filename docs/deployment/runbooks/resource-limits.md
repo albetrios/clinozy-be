@@ -36,6 +36,12 @@ Container memory (Railway slider / Kubernetes `limits.memory`) is often expresse
 
 The worker process logs a warning when **RSS** exceeds **512 MiB** ([`src/infrastructure/queue/bootstrap.ts`](../../../src/infrastructure/queue/bootstrap.ts)). If the container limit is **below ~768 MiB**, every healthy worker may trip that threshold — tune the deployment (more memory), lower concurrency (`WORKER_CONCURRENCY`), or eventually adjust the threshold in code if intentional.
 
+The patient image thumbnail job is the worker's one image decoder: one photo at a time, at most
+64 MP (`UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS`, checked from the header) and 30 s per photo, with the
+libvips cache off and one libvips thread. The worst case, a PNG at the cap, decodes to about 256 MB
+on top of the worker's baseline (JPEGs shrink while they load and stay far smaller), so give the
+worker container at least 768 MiB.
+
 ### Postgres connection budget
 
 Each **API** and **worker** process opens **two** node-postgres pools: the primary one (`DATABASE_POOL_MAX`, default **70**) and the maintenance role's (`DATABASE_MAINTENANCE_POOL_MAX`, default **10** — mail outbox and ledger workers, retention purges, system audit inserts, all short checkouts). Size deployments so:

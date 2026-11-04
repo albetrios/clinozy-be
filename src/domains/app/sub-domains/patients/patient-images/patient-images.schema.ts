@@ -19,6 +19,7 @@ import { appointments } from '@/domains/app/sub-domains/appointments/appointment
 import { patient_treatments } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import { RECORD_DELETE_REASON_VALUES } from '@/shared/constants/record-fields.constants.js';
+import { UPLOAD_THUMBNAIL_SKIP_REASON_VALUES } from '@/domains/upload/upload.constants.js';
 import { PATIENT_BODY_PART_VALUES } from '@/domains/app/sub-domains/patients/patients.constants.js';
 import {
   PATIENT_IMAGE_ALBUM_VALUES,
@@ -35,7 +36,8 @@ import {
  *   body part from the patient file's one list (TR8). The patient `ON DELETE RESTRICT` (P7). RLS on
  *   the organization GUC with the retention-cleanup arm for the deleted-record purge and the
  *   thumbnail sweep. `thumbnail_key` is the background thumbnail (feat-patient-image-thumbnails),
- *   null until it exists.
+ *   null until it exists; `thumbnail_skip_reason` records why the job made none (a final skip — the
+ *   sweep and the backfill pass the photo by), never set beside a key.
  */
 export const patient_images = appSchema
   .table(
@@ -56,6 +58,8 @@ export const patient_images = appSchema
       file_key: varchar('file_key', { length: 512 }).notNull(),
       // Its thumbnail's object key — null until the thumbnail job makes one (and after a delete)
       thumbnail_key: varchar('thumbnail_key', { length: 512 }),
+      // Why the thumbnail job made none (UPLOAD_THUMBNAIL_SKIP_REASON_VALUES) — null until it skips
+      thumbnail_skip_reason: varchar('thumbnail_skip_reason', { length: 20 }),
       // From the upload (P25)
       file_name: varchar('file_name', { length: 120 }).notNull(),
       // The drawer's Name
@@ -143,6 +147,14 @@ export const patient_images = appSchema
       check(
         'chk_patient_images_body_part',
         sql`${table.body_part} IN (${sqlLiteralList(PATIENT_BODY_PART_VALUES)})`,
+      ),
+      check(
+        'chk_patient_images_thumbnail_skip_reason',
+        sql`${table.thumbnail_skip_reason} IN (${sqlLiteralList(UPLOAD_THUMBNAIL_SKIP_REASON_VALUES)})`,
+      ),
+      check(
+        'chk_patient_images_thumbnail_or_skip',
+        sql`${table.thumbnail_key} IS NULL OR ${table.thumbnail_skip_reason} IS NULL`,
       ),
       check('chk_patient_images_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(

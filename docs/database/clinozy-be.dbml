@@ -1149,6 +1149,7 @@ Table app.patient_images {
   stage varchar(6)
   taken_on date [not null]
   thumbnail_key varchar(512)
+  thumbnail_skip_reason varchar(20)
   updated_at timestamptz [not null]
   updated_by_user_id bigint
 }

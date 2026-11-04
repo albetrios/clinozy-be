@@ -9,6 +9,7 @@ import { createProviderPausableWorker } from '@/infrastructure/queue/worker-runt
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 import { runWithPropagatedTraceContext } from '@/infrastructure/observability/tracing/trace-context.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { configureImageThumbnailDecoder } from '@/domains/upload/utils/upload-thumbnail.util.js';
 import {
   type PatientImageThumbnailJobData,
   patientImageThumbnailJobDataSchema,
@@ -35,13 +36,18 @@ import { runPatientImageThumbnailReconcileJob } from './patient-image-thumbnail-
  *   without spending an attempt; any other error takes BullMQ's retry/backoff, then the dead
  *   letter; stalled jobs are warn-logged.
  * - **Side effects:** a BullMQ Redis connection; short Postgres checkouts per job, never held
- *   across the S3 call; image decoding in-process (concurrency 1 keeps a 15 MB decode alone).
+ *   across the S3 call; image decoding in-process — one job at a time (concurrency 1), the decoder
+ *   set up at start ({@link configureImageThumbnailDecoder}: no libvips cache, one thread). What
+ *   one decode may hold is bounded by pixels, not by the file's bytes: a 15 MB PNG can claim
+ *   gigapixels, so the source is refused past `UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS` (64 MP, about
+ *   256 MB decoded) or `UPLOAD_THUMBNAIL_TIMEOUT_SECONDS` (30 s).
  * - **Notes:** pull-based; jobs come from a photo's create, delete or restore (after the commit),
  *   the sweep and the backfill (`pnpm ops:patient-image-thumbnails-backfill`).
  */
 export function createPatientImageThumbnailWorker(
   storage: PatientImageThumbnailStorage,
 ): WorkerHandle {
+  configureImageThumbnailDecoder();
   const worker = createProviderPausableWorker<PatientImageThumbnailJobData>({
     queueName: PATIENT_IMAGE_THUMBNAIL_QUEUE_NAME,
     provider: 's3',

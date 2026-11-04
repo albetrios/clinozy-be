@@ -2,10 +2,13 @@ import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import {
   buildThumbnailObjectKey,
+  configureImageThumbnailDecoder,
   createImageThumbnail,
   UPLOAD_THUMBNAIL_MAX_DIMENSION,
+  UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS,
   UploadThumbnailSourceError,
 } from '@/domains/upload/utils/upload-thumbnail.util.js';
+import { oversizedPngHeader } from '@/tests/helpers/oversized-image.helper.js';
 
 /** A solid JPEG of the given size, with an EXIF orientation and a camera make. */
 async function jpeg({
@@ -71,5 +74,32 @@ describe('createImageThumbnail', () => {
     await expect(createImageThumbnail(Buffer.from('not an image'))).rejects.toBeInstanceOf(
       UploadThumbnailSourceError,
     );
+  });
+
+  it('refuses an image over the pixel cap from its header, before decoding it', async () => {
+    // 9000 × 9000 = 81 MP in 70-odd bytes — under sharp's own 268 MP default, over the 64 MP cap
+    const bomb = oversizedPngHeader({ width: 9000, height: 9000 });
+    expect(9000 * 9000).toBeGreaterThan(UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS);
+    const refusal = await createImageThumbnail(bomb).catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(UploadThumbnailSourceError);
+    expect(((refusal as Error).cause as Error).message).toMatch(/exceeds pixel limit/);
+  });
+
+  it('lets a large photo inside the cap through to the decoder (a 48 MP phone shot, 8064 × 6048)', async () => {
+    expect(8064 * 6048).toBeLessThan(UPLOAD_THUMBNAIL_MAX_INPUT_PIXELS);
+    const refusal = await createImageThumbnail(
+      oversizedPngHeader({ width: 8064, height: 6048 }),
+    ).catch((error: unknown) => error);
+    // Its header passes the cap, so the decoder reads on and finds the image data empty
+    expect(((refusal as Error).cause as Error).message).not.toMatch(/exceeds pixel limit/);
+  });
+});
+
+describe('configureImageThumbnailDecoder', () => {
+  it('turns the libvips cache off and decodes each image on one thread', () => {
+    configureImageThumbnailDecoder();
+    expect(sharp.concurrency()).toBe(1);
+    const cache = sharp.cache();
+    expect([cache.memory.max, cache.files.max, cache.items.max]).toEqual([0, 0, 0]);
   });
 });

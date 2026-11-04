@@ -1,6 +1,7 @@
 import { runOrganizationScopedWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import type { UploadService } from '@/domains/upload/upload.service.js';
+import type { UploadThumbnailSkipReason } from '@/domains/upload/upload.constants.js';
 import { createWorkerPatientImageThumbnailRepository } from '@/domains/app/sub-domains/patients/patient-images/patient-image-thumbnail.repository.js';
 
 /**
@@ -28,7 +29,7 @@ export type PatientImageThumbnailOutcome =
   | { outcome: 'removed'; thumbnailKey: string }
   | {
       outcome: 'skipped';
-      reason: 'row_gone' | 'in_sync' | 'not_opted_in' | 'source_missing' | 'source_unusable';
+      reason: 'row_gone' | 'in_sync' | UploadThumbnailSkipReason;
     };
 
 /**
@@ -43,9 +44,12 @@ export type PatientImageThumbnailOutcome =
  *   still holds the removed key). A photo restored while its thumbnail was being removed is left
  *   empty and live, and the job kept behind this one (the restore's) makes it again.
  * - **Failure modes:** a photo that is gone, already in step, outside the opted-in prefixes, or
- *   whose stored file is missing or unreadable is a skip (completed, warn log for the last
- *   three) — the photo keeps its full-size fallback; a storage or database error propagates, so
- *   BullMQ retries it (the queue pauses on an S3 outage).
+ *   whose stored file is missing or unreadable (corrupt, over the pixel cap, past the time limit)
+ *   is a skip (completed, warn log for the last three) — the photo keeps its full-size fallback,
+ *   and for the last three the job records the reason (`thumbnail_skip_reason`, a compare-and-set)
+ *   so the sweep stops re-queuing it; a later run that makes the thumbnail (a restore) clears it.
+ *   A storage or database error propagates, so BullMQ retries it (the queue pauses on an S3
+ *   outage).
  * - **Side effects:** at most one GET + PUT or one DELETE on the object store; one row update.
  */
 export async function syncPatientImageThumbnail({
@@ -79,6 +83,9 @@ export async function syncPatientImageThumbnail({
       logger.warn(
         { organizationPublicId, patientImagePublicId, reason: result.reason },
         'patient-image-thumbnail.source_unusable',
+      );
+      await inOrganization((repository) =>
+        repository.markThumbnailSkipped({ id: row.id, reason: result.reason }),
       );
       return { outcome: 'skipped', reason: result.reason };
     }

@@ -4,6 +4,7 @@ const repository = {
   findByPublicId: vi.fn(),
   setThumbnailKey: vi.fn(),
   clearThumbnailKey: vi.fn(),
+  markThumbnailSkipped: vi.fn(),
 };
 let insideContext = false;
 
@@ -53,6 +54,7 @@ describe('syncPatientImageThumbnail', () => {
     vi.clearAllMocks();
     repository.setThumbnailKey.mockResolvedValue(true);
     repository.clearThumbnailKey.mockResolvedValue(true);
+    repository.markThumbnailSkipped.mockResolvedValue(true);
   });
 
   it('makes a live photo’s thumbnail and records its key', async () => {
@@ -107,20 +109,21 @@ describe('syncPatientImageThumbnail', () => {
     expect(storage.deleteThumbnail).not.toHaveBeenCalled();
   });
 
-  it('leaves the photo on its full-size fallback when the source cannot be used', async () => {
-    repository.findByPublicId.mockResolvedValue({
-      id: 7,
-      fileKey: FILE_KEY,
-      thumbnailKey: null,
-      deletedAt: null,
-    });
-    storage.createThumbnail.mockResolvedValueOnce({
-      kind: 'skipped',
-      reason: 'source_unusable',
-    } as never);
-    await expect(run()).resolves.toEqual({ outcome: 'skipped', reason: 'source_unusable' });
-    expect(repository.setThumbnailKey).not.toHaveBeenCalled();
-  });
+  it.each(['source_unusable', 'source_missing', 'not_opted_in'] as const)(
+    'leaves the photo on its full-size fallback and records %s, so the sweep stops',
+    async (reason) => {
+      repository.findByPublicId.mockResolvedValue({
+        id: 7,
+        fileKey: FILE_KEY,
+        thumbnailKey: null,
+        deletedAt: null,
+      });
+      storage.createThumbnail.mockResolvedValueOnce({ kind: 'skipped', reason } as never);
+      await expect(run()).resolves.toEqual({ outcome: 'skipped', reason });
+      expect(repository.setThumbnailKey).not.toHaveBeenCalled();
+      expect(repository.markThumbnailSkipped).toHaveBeenCalledWith({ id: 7, reason });
+    },
+  );
 
   it('lets a storage failure through so BullMQ retries, writing nothing', async () => {
     repository.findByPublicId.mockResolvedValue({
@@ -132,5 +135,6 @@ describe('syncPatientImageThumbnail', () => {
     storage.createThumbnail.mockRejectedValueOnce(new Error('S3 503'));
     await expect(run()).rejects.toThrow('S3 503');
     expect(repository.setThumbnailKey).not.toHaveBeenCalled();
+    expect(repository.markThumbnailSkipped, 'a retry is no final skip').not.toHaveBeenCalled();
   });
 });
