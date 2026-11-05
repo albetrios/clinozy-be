@@ -27,13 +27,6 @@ auditConfig:
     # globs, never user input; the production tree is clean (`pnpm deps:audit:prod`).
     # Remove when braces publishes a fix, then add an override for it.
     - GHSA-vfj7-8cjw-p6xm
-    # minimatch <11.0.1 — GHSA-g3hv-75wg-m249 (moderate): DoS through globparts amplification.
-    # Dev-only here: @scalar/cli (@stoplight/spectral-*, @rollup/plugin-commonjs) and
-    # @stryker-mutator/core pin minimatch 3–10 and no fix exists below 11, a major whose API they
-    # do not use; they expand repo-controlled globs, never user input. The production tree is clean
-    # (the glob override below lifts its paths onto glob 14 / minimatch 11; `pnpm deps:audit:prod`).
-    # Remove when those tools move to minimatch 11.
-    - GHSA-g3hv-75wg-m249
 
 overrides:
   # Only advisories a dependency pins or caps below the fix. A version selector (`pkg@<fixed`)
@@ -91,6 +84,11 @@ overrides:
   # GHSA-g3hv-75wg-m249 (moderate, globparts amplification DoS) — on the same paths.
   '@fastify/static>glob': '^14.0.2'
   '@sentry/bundler-plugins>glob': '^14.0.2'
+  # minimatch >=7.0.0 <11.0.1 — GHSA-g3hv-75wg-m249 (moderate, globparts amplification DoS). Dev
+  # tree only: @stryker-mutator/core pins ~10.2.4 and no 10.x fix exists, so the jump is confined to
+  # it; it imports only `minimatch` and `Minimatch`, both kept in 11. (@stoplight/spectral-core's
+  # minimatch 3 is outside the vulnerable range.)
+  '@stryker-mutator/core>minimatch': '^11.0.1'
 
 # Vitest 5 joins suite + test names with " > "; @stryker-mutator/vitest-runner 10.0.0 joins its test ids
 # with spaces, so no test matched and every mutant ran zero tests. Drop once the runner ships the fix
