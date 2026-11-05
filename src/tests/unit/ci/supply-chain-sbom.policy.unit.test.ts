@@ -51,17 +51,12 @@ describe('supply chain SBOM policy (#94 p3-sbom-syft)', () => {
 
   it('accepts an advisory only with its reason, and only when no fix exists', () => {
     const workspace = readFileSync(join(ROOT, 'pnpm-workspace.yaml'), 'utf8');
-    const block = workspace.slice(
-      workspace.indexOf('auditConfig:'),
-      workspace.indexOf('overrides:'),
-    );
-    const ignored = [...block.matchAll(/^\s+- (GHSA-[a-z0-9-]+)$/gm)].map((match) => match[1]);
-    expect(ignored).toEqual(['GHSA-vfj7-8cjw-p6xm']);
-    // Every waiver carries its path and its removal condition right above it.
-    expect(block).toContain('No patched release');
-    expect(block).toContain('Remove when braces publishes a fix');
-    // minimatch GHSA-g3hv-75wg-m249 left the list: it is fixed by an override, not accepted
-    expect(block).not.toContain('GHSA-g3hv-75wg-m249');
+    // No advisory is accepted today: braces left once the advisory database stopped reporting the
+    // locked 3.0.3, and minimatch is fixed by an override. A new waiver must come with its path and
+    // removal condition — the comment that stands where the block goes says so.
+    expect(workspace).not.toMatch(/^auditConfig:/m);
+    expect(workspace).toContain('None is accepted today');
+    expect(workspace).toContain('one `- GHSA-…` line each, under a comment naming its path');
     expect(workspace).toContain("'@stryker-mutator/core>minimatch': '^11.0.1'");
   });
 

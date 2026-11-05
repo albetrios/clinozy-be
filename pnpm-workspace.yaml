@@ -17,16 +17,12 @@ allowBuilds:
   ssh2: true
   vue-demi: false
 
-# Advisories accepted because no fixed version exists — one entry per GHSA, each with its
-# path and the condition for removing it. Prefer an override above whenever a fix exists.
-auditConfig:
-  ignoreGhsas:
-    # braces <=3.0.3 — GHSA-vfj7-8cjw-p6xm (high): stack-exhaustion DoS through deeply
-    # nested brace patterns. No patched release (3.0.3 is the newest). Dev-only: reached via
-    # markdownlint-cli2 and tsc-alias > micromatch / chokidar, which expand repo-controlled
-    # globs, never user input; the production tree is clean (`pnpm deps:audit:prod`).
-    # Remove when braces publishes a fix, then add an override for it.
-    - GHSA-vfj7-8cjw-p6xm
+# Advisories accepted because no fixed version exists go under `auditConfig:` → `ignoreGhsas:`,
+# one `- GHSA-…` line each, under a comment naming its path and the condition for removing it.
+# Prefer an override below whenever a fix exists. None is accepted today: braces
+# (GHSA-vfj7-8cjw-p6xm) left on 2026-11-05 — the advisory database no longer reports the locked
+# 3.0.3, so `pnpm audit` is clean without it (as in clinozy-fe since 2026-10-24) — and minimatch
+# (GHSA-g3hv-75wg-m249) is fixed by the @stryker-mutator/core override below.
 
 overrides:
   # Only advisories a dependency pins or caps below the fix. A version selector (`pkg@<fixed`)
