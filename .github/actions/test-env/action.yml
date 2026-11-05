@@ -68,7 +68,7 @@ runs:
 
         {
           echo "JWT_PRIVATE_KEY<<__CI_JWT_PRIVATE_KEY__"
-          echo "-----BEGIN PRIVATE KEY-----"
+          echo "-----BEGIN PRIVATE KEY-----" # gitleaks:allow — CI-only test fixture, never a deployed key
           echo "MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDJp33Skforij0b"
           echo "cb5iPkuY7IeTw+X6NuKmkadoCS7aRaQgkon9u/s1Lj05tRuZTgw0VqfYiIbud2z1"
           echo "PWJtl4niSyG8cjNdglpUkNW1f7oaDC9YoGfup5telmZy5vK5IVieT0fn5ePLRdlk"
