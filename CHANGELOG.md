@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.5.1](https://github.com/albetrios/clinozy-be/compare/v9.5.0...v9.5.1) (2026-11-07)
+
+
+### Fixed
+
+* **ci:** a passing re-run clears a stale early failure alert ([#207](https://github.com/albetrios/clinozy-be/issues/207)) ([015c5db](https://github.com/albetrios/clinozy-be/commit/015c5dbb3dffd5ad051c657dab7d19abb993e79a))
+* **ci:** mark the test-env JWT fixture key gitleaks:allow ([#208](https://github.com/albetrios/clinozy-be/issues/208)) ([969dc6a](https://github.com/albetrios/clinozy-be/commit/969dc6a461aaf89c5605a2a23e75255df4376528))
+* **deps:** fix minimatch via Stryker override and drop every audit waiver ([#209](https://github.com/albetrios/clinozy-be/issues/209)) ([3814d10](https://github.com/albetrios/clinozy-be/commit/3814d10f5e072f6bf9221776a4321083e87eb353))
+
 ## [9.5.0](https://github.com/albetrios/clinozy-be/compare/v9.4.1...v9.5.0) (2026-11-04)
 
 
